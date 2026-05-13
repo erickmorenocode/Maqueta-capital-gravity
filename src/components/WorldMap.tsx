@@ -39,7 +39,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
         .data(countries.features)
         .enter()
         .append("path")
-        .attr("d", path)
+        .attr("d", (d: any) => path(d) ?? '')
         .attr("fill", "#1a1a1a")
         .attr("stroke", "#333")
         .attr("stroke-width", 0.5);
