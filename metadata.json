@@ -1,0 +1,5 @@
+{
+  "name": "Capital Gravity 2",
+  "description": "Visualización interactiva de los flujos globales de capital basada en la teoría de la gravedad del mercado, mostrando cómo se mueve el dinero en escenarios hawkish, dovish y de crisis.",
+  "requestFramePermissions": []
+}
