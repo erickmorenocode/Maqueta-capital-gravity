@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-bg: #0a0a0a;
+  --color-ink: #ffffff;
+  --color-accent: #00ff88;
+  --color-danger: #ff4444;
+  --color-surface: #1a1a1a;
+  --color-border: #333333;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+  }
+}
+
+.glass {
+  @apply bg-surface/80 backdrop-blur-md border border-border;
+}
+
+.glow-accent {
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+}
+
+@keyframes flow {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flow {
+  stroke-dasharray: 10;
+  animation: flow 2s linear infinite;
+}

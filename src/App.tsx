@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Globe, 
@@ -31,6 +31,9 @@ export default function App() {
   const [scenarios, setScenarios] = useState<MarketScenario[]>(SCENARIOS);
   const [selectedPoint, setSelectedPoint] = useState<GeoPoint | null>(null);
 
+  const activeScenarioRef = useRef(activeScenario);
+  useEffect(() => { activeScenarioRef.current = activeScenario; }, [activeScenario]);
+
   useEffect(() => {
     handleFetchLive();
     
@@ -48,7 +51,7 @@ export default function App() {
     };
 
     fetchPrices();
-    const interval = setInterval(fetchPrices, 60 * 60 * 1000); // 1 hour
+    const interval = setInterval(fetchPrices, 15 * 60 * 1000); // 15 minutes
     
     return () => clearInterval(interval);
   }, []);
@@ -78,8 +81,9 @@ export default function App() {
       console.error("Failed to fetch live data", error);
       // If error, remove the "Cargando..." placeholder and fallback to Hawkish
       setScenarios(prev => prev.filter(s => s.id !== 'current'));
-      if (activeScenario.id === 'current') {
-        setActiveScenario(SCENARIOS[1]); // Fallback to Hawkish
+      if (activeScenarioRef.current.id === 'current') {
+        const hawkish = SCENARIOS.find(s => s.id === 'hawkish') ?? SCENARIOS[0];
+        setActiveScenario(hawkish);
       }
     } finally {
       setIsLiveLoading(false);
