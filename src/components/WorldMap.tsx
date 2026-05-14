@@ -33,12 +33,17 @@ const ISO_NAMES: Record<string, string> = {
 };
 
 const SECTORS = [
-  { id: 'equities', name: 'ACCIONES', angle: -90 },
-  { id: 'bonds', name: 'BONOS', angle: -30 },
-  { id: 'realestate', name: 'INMOB.', angle: 30 },
-  { id: 'energy', name: 'ENERGÍA', angle: 90 },
-  { id: 'fintech', name: 'FINTECH', angle: 150 },
-  { id: 'currency', name: 'DIVISA', angle: -150 },
+  { id: 'technology',         name: 'TECNOLOG.',  angle: -90  },
+  { id: 'communication',      name: 'COMUNIC.',   angle: -57  },
+  { id: 'cons_discretionary', name: 'C.DISCR.',   angle: -25  },
+  { id: 'cons_staples',       name: 'C.BÁSICO',   angle: 8    },
+  { id: 'energy',             name: 'ENERGÍA',    angle: 41   },
+  { id: 'financial',          name: 'FINANCIERO', angle: 74   },
+  { id: 'healthcare',         name: 'SALUD',      angle: 106  },
+  { id: 'industrials',        name: 'INDUSTR.',   angle: 139  },
+  { id: 'real_estate',        name: 'INMOB.',     angle: 172  },
+  { id: 'basic_materials',    name: 'MATER.',     angle: 205  },
+  { id: 'utilities',          name: 'UTILITIES',  angle: 237  },
 ];
 
 interface SectorFlow { from: string; to: string; strength: number; }
@@ -49,90 +54,118 @@ function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows: Sector
 
   const metricsMap: Record<string, Record<string, { masa: number; distancia: number }>> = {
     hawkish: {
-      equities: { masa: 30, distancia: 70 },
-      bonds: { masa: 90, distancia: 10 },
-      realestate: { masa: 20, distancia: 60 },
-      energy: { masa: 55, distancia: 45 },
-      fintech: { masa: 25, distancia: 75 },
-      currency: { masa: 85, distancia: 15 },
+      technology:         { masa: 25, distancia: 75 },
+      communication:      { masa: 35, distancia: 60 },
+      cons_discretionary: { masa: 30, distancia: 65 },
+      cons_staples:       { masa: 62, distancia: 30 },
+      energy:             { masa: 70, distancia: 35 },
+      financial:          { masa: 88, distancia: 12 },
+      healthcare:         { masa: 65, distancia: 28 },
+      industrials:        { masa: 50, distancia: 48 },
+      real_estate:        { masa: 15, distancia: 85 },
+      basic_materials:    { masa: 55, distancia: 42 },
+      utilities:          { masa: 48, distancia: 45 },
     },
     dovish: {
-      equities: { masa: 85, distancia: 20 },
-      bonds: { masa: 20, distancia: 30 },
-      realestate: { masa: 72, distancia: 28 },
-      energy: { masa: 65, distancia: 35 },
-      fintech: { masa: 90, distancia: 22 },
-      currency: { masa: 30, distancia: 40 },
+      technology:         { masa: 92, distancia: 14 },
+      communication:      { masa: 78, distancia: 22 },
+      cons_discretionary: { masa: 82, distancia: 22 },
+      cons_staples:       { masa: 25, distancia: 32 },
+      energy:             { masa: 68, distancia: 38 },
+      financial:          { masa: 38, distancia: 48 },
+      healthcare:         { masa: 58, distancia: 34 },
+      industrials:        { masa: 80, distancia: 20 },
+      real_estate:        { masa: 85, distancia: 18 },
+      basic_materials:    { masa: 72, distancia: 28 },
+      utilities:          { masa: 22, distancia: 38 },
     },
     crisis: {
-      equities: { masa: 10, distancia: 90 },
-      bonds: { masa: 95, distancia: 5 },
-      realestate: { masa: 15, distancia: 80 },
-      energy: { masa: 60, distancia: 55 },
-      fintech: { masa: 8, distancia: 92 },
-      currency: { masa: 80, distancia: 20 },
+      technology:         { masa: 12, distancia: 88 },
+      communication:      { masa: 18, distancia: 78 },
+      cons_discretionary: { masa:  8, distancia: 92 },
+      cons_staples:       { masa: 90, distancia:  8 },
+      energy:             { masa: 62, distancia: 52 },
+      financial:          { masa: 22, distancia: 72 },
+      healthcare:         { masa: 92, distancia:  8 },
+      industrials:        { masa: 15, distancia: 80 },
+      real_estate:        { masa: 10, distancia: 88 },
+      basic_materials:    { masa: 48, distancia: 55 },
+      utilities:          { masa: 82, distancia: 15 },
     },
     liquidity: {
-      equities: { masa: 82, distancia: 18 },
-      bonds: { masa: 15, distancia: 15 },
-      realestate: { masa: 78, distancia: 22 },
-      energy: { masa: 70, distancia: 28 },
-      fintech: { masa: 95, distancia: 15 },
-      currency: { masa: 25, distancia: 35 },
+      technology:         { masa: 96, distancia: 12 },
+      communication:      { masa: 82, distancia: 20 },
+      cons_discretionary: { masa: 84, distancia: 20 },
+      cons_staples:       { masa: 20, distancia: 28 },
+      energy:             { masa: 76, distancia: 28 },
+      financial:          { masa: 62, distancia: 28 },
+      healthcare:         { masa: 55, distancia: 32 },
+      industrials:        { masa: 80, distancia: 20 },
+      real_estate:        { masa: 86, distancia: 18 },
+      basic_materials:    { masa: 72, distancia: 26 },
+      utilities:          { masa: 15, distancia: 22 },
     },
   };
 
-  const fallback = {
-    equities: { masa: 55, distancia: 45 },
-    bonds: { masa: 65, distancia: 25 },
-    realestate: { masa: 50, distancia: 50 },
-    energy: { masa: 60, distancia: 40 },
-    fintech: { masa: 70, distancia: 30 },
-    currency: { masa: 72, distancia: 28 },
+  const fallback: Record<string, { masa: number; distancia: number }> = {
+    technology:         { masa: 60, distancia: 40 },
+    communication:      { masa: 60, distancia: 40 },
+    cons_discretionary: { masa: 60, distancia: 40 },
+    cons_staples:       { masa: 60, distancia: 40 },
+    energy:             { masa: 60, distancia: 40 },
+    financial:          { masa: 60, distancia: 40 },
+    healthcare:         { masa: 60, distancia: 40 },
+    industrials:        { masa: 60, distancia: 40 },
+    real_estate:        { masa: 60, distancia: 40 },
+    basic_materials:    { masa: 60, distancia: 40 },
+    utilities:          { masa: 60, distancia: 40 },
   };
 
   const metrics = metricsMap[scenarioId] ?? fallback;
 
   const nodes: SectorNode[] = SECTORS.map(s => {
-    const m = metrics[s.id];
+    const m = metrics[s.id] ?? { masa: 50, distancia: 50 };
     const force = (m.masa - m.distancia) / FRICCION;
     return { id: s.id, masa: m.masa, distancia: m.distancia, isGravityCenter: force > 3.0 };
   });
 
   const flowsMap: Record<string, SectorFlow[]> = {
     hawkish: [
-      { from: 'equities', to: 'bonds', strength: 0.9 },
-      { from: 'realestate', to: 'bonds', strength: 0.7 },
-      { from: 'fintech', to: 'bonds', strength: 0.8 },
-      { from: 'energy', to: 'currency', strength: 0.5 },
-      { from: 'equities', to: 'currency', strength: 0.6 },
+      { from: 'technology',         to: 'financial',  strength: 0.88 },
+      { from: 'real_estate',        to: 'financial',  strength: 0.92 },
+      { from: 'cons_discretionary', to: 'financial',  strength: 0.72 },
+      { from: 'communication',      to: 'financial',  strength: 0.65 },
+      { from: 'cons_discretionary', to: 'cons_staples', strength: 0.60 },
+      { from: 'technology',         to: 'healthcare', strength: 0.55 },
     ],
     dovish: [
-      { from: 'bonds', to: 'equities', strength: 0.8 },
-      { from: 'bonds', to: 'fintech', strength: 0.7 },
-      { from: 'currency', to: 'realestate', strength: 0.6 },
-      { from: 'currency', to: 'energy', strength: 0.5 },
+      { from: 'financial',     to: 'technology',         strength: 0.88 },
+      { from: 'utilities',     to: 'real_estate',        strength: 0.76 },
+      { from: 'cons_staples',  to: 'cons_discretionary', strength: 0.72 },
+      { from: 'financial',     to: 'communication',      strength: 0.65 },
+      { from: 'basic_materials', to: 'industrials',      strength: 0.60 },
     ],
     crisis: [
-      { from: 'equities', to: 'bonds', strength: 0.95 },
-      { from: 'fintech', to: 'bonds', strength: 0.92 },
-      { from: 'realestate', to: 'bonds', strength: 0.8 },
-      { from: 'realestate', to: 'currency', strength: 0.7 },
-      { from: 'energy', to: 'currency', strength: 0.6 },
+      { from: 'technology',         to: 'healthcare',   strength: 0.92 },
+      { from: 'real_estate',        to: 'utilities',    strength: 0.88 },
+      { from: 'cons_discretionary', to: 'cons_staples', strength: 0.92 },
+      { from: 'financial',          to: 'healthcare',   strength: 0.76 },
+      { from: 'communication',      to: 'cons_staples', strength: 0.70 },
+      { from: 'industrials',        to: 'utilities',    strength: 0.65 },
     ],
     liquidity: [
-      { from: 'bonds', to: 'fintech', strength: 0.9 },
-      { from: 'bonds', to: 'equities', strength: 0.8 },
-      { from: 'currency', to: 'realestate', strength: 0.7 },
-      { from: 'energy', to: 'equities', strength: 0.6 },
-      { from: 'bonds', to: 'realestate', strength: 0.5 },
+      { from: 'utilities',       to: 'technology',         strength: 0.92 },
+      { from: 'cons_staples',    to: 'real_estate',        strength: 0.82 },
+      { from: 'financial',       to: 'technology',         strength: 0.76 },
+      { from: 'financial',       to: 'communication',      strength: 0.70 },
+      { from: 'basic_materials', to: 'industrials',        strength: 0.65 },
     ],
   };
 
   const flows = flowsMap[scenarioId] ?? [
-    { from: 'equities', to: 'bonds', strength: 0.5 },
-    { from: 'bonds', to: 'fintech', strength: 0.4 },
-    { from: 'currency', to: 'equities', strength: 0.4 },
+    { from: 'technology',    to: 'financial',          strength: 0.50 },
+    { from: 'cons_staples',  to: 'cons_discretionary', strength: 0.40 },
+    { from: 'energy',        to: 'industrials',        strength: 0.40 },
   ];
 
   return { nodes, flows };
@@ -418,7 +451,7 @@ function drawSectorOverlay(
   const bboxSize = Math.min(x1 - x0, y1 - y0);
   const radius = Math.max(bboxSize * 0.28, 14);
   const nodeR = Math.max(radius * 0.14, 2.5);
-  const textSize = Math.max(radius * 0.11, 4);
+  const textSize = Math.max(radius * 0.09, 4);
 
   const { nodes, flows } = getSectorData(scenarioId);
   const sectorGroup = g.append('g').attr('class', 'country-sectors');
