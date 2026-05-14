@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Globe, 
@@ -35,6 +35,21 @@ export default function App() {
 
   const activeScenarioRef = useRef(activeScenario);
   useEffect(() => { activeScenarioRef.current = activeScenario; }, [activeScenario]);
+
+  const handlePointClick = useCallback((point: GeoPoint) => {
+    setSelectedPoint(point);
+    setSelectedSectorId(null);
+  }, []);
+
+  const handleCountrySelect = useCallback((name: string | null) => {
+    setSelectedCountry(name);
+    if (!name) setSelectedSectorId(null);
+  }, []);
+
+  const handleSectorClick = useCallback((sectorId: string) => {
+    setSelectedSectorId(sectorId);
+    setSelectedPoint(null);
+  }, []);
 
   useEffect(() => {
     handleFetchLive();
@@ -320,9 +335,9 @@ export default function App() {
             <WorldMap
               scenario={activeScenario}
               geoPoints={GEO_POINTS}
-              onPointClick={(point) => { setSelectedPoint(point); setSelectedSectorId(null); }}
-              onCountrySelect={(name) => { setSelectedCountry(name); if (!name) setSelectedSectorId(null); }}
-              onSectorClick={(sectorId) => { setSelectedSectorId(sectorId); setSelectedPoint(null); }}
+              onPointClick={handlePointClick}
+              onCountrySelect={handleCountrySelect}
+              onSectorClick={handleSectorClick}
             />
             
             {/* Sector Drill-down Overlay */}

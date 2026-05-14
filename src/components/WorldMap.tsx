@@ -60,6 +60,9 @@ const ISO_NAMES: Record<string, string> = {
   '826': 'Reino Unido', '834': 'Tanzania', '840': 'EE.UU.',
   '858': 'Uruguay', '860': 'Uzbekistán', '862': 'Venezuela',
   '887': 'Yemen', '894': 'Zambia',
+  '90': 'Islas Salomón', '158': 'Taiwán', '275': 'Palestina',
+  '304': 'Groenlandia', '412': 'Kosovo', '626': 'Timor-Leste',
+  '630': 'Puerto Rico', '732': 'Sahara Occidental',
 };
 
 export const SECTORS = [
