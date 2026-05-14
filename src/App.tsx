@@ -26,6 +26,35 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function deriveSectorComponents(masa: number, distancia: number) {
+  // Masa: M = 0.25*(retorno+crecimiento+liquidezActivo+confianza)
+  // multipliers sum to 4.0 so 0.25*sum = masa exactly
+  const retorno        = Math.round(masa * 0.90);
+  const crecimiento    = Math.round(masa * 0.85);
+  const liquidezActivo = Math.round(masa * 1.05);
+  const confianza      = 4 * masa - retorno - crecimiento - liquidezActivo;
+
+  // Distancia: r = vol + spread + (1-ρ)*100 (raw, then normalized)
+  const correlacion = parseFloat(Math.max(0.20, Math.min(0.95, 1 - distancia / 160)).toFixed(2));
+  const volatilidad = Math.round(distancia * 0.85);
+  const spread      = Math.round(distancia * 0.65);
+  const rawSum      = parseFloat((volatilidad + spread + (1 - correlacion) * 100).toFixed(1));
+
+  // Fricción: F = (bidAsk + restric + (100-profund)) / 3 = 10 always
+  // profundidad varies with masa (more liquid sectors have deeper books)
+  const profundidad   = Math.round(Math.min(92, Math.max(75, masa * 0.15 + 75)));
+  const remainder     = profundidad - 70; // bidAsk + restric = profundidad - 70
+  const bidAskSpread  = Math.max(1, Math.round(remainder * 0.55));
+  const restricciones = Math.max(1, remainder - bidAskSpread);
+  // F = (bidAsk + restric + (100-profund)) / 3 = (remainder + 100-profund) / 3 = 30/3 = 10 ✓
+
+  return {
+    masaComponents:      { retorno, crecimiento, liquidezActivo, confianza },
+    distanciaComponents: { volatilidad, spread, correlacion, rawSum },
+    friccionComponents:  { bidAskSpread, restricciones, profundidad },
+  };
+}
+
 export default function App() {
   const [activeScenario, setActiveScenario] = useState<MarketScenario>(SCENARIOS[0]);
   const [marketPrices, setMarketPrices] = useState<MarketPrices>(DEFAULT_PRICES);
@@ -34,6 +63,7 @@ export default function App() {
   const [selectedPoint, setSelectedPoint] = useState<GeoPoint | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedSectorId, setSelectedSectorId] = useState<string | null>(null);
+  const [expandedSectorField, setExpandedSectorField] = useState<{ sectorId: string; field: 'masa' | 'distancia' | 'friccion' } | null>(null);
   const [darkMode, setDarkMode] = useState(true);
 
   useEffect(() => {
@@ -219,7 +249,7 @@ export default function App() {
                     activeScenario.id === scenario.id 
                       ? "bg-accent/10 border-accent/50 glow-accent" 
                       : "bg-surface/40 border-border hover:border-ink/20",
-                    scenario.id === 'live' && "border-accent/40 bg-accent/5"
+                    (scenario.id === 'live' || scenario.id === 'current') && "border-accent/40 bg-accent/5"
                   )}
                 >
                   {activeScenario.id === scenario.id && (
@@ -236,8 +266,10 @@ export default function App() {
                       )}>
                         {scenario.name}
                       </span>
-                      {scenario.id === 'live' && (
-                        <span className="px-1.5 py-0.5 rounded bg-accent text-bg text-[8px] font-bold animate-pulse">VIVO</span>
+                      {(scenario.id === 'live' || scenario.id === 'current') && (
+                        <span className="px-1.5 py-0.5 rounded bg-accent text-bg text-[8px] font-bold animate-pulse">
+                          {scenario.id === 'current' && isLiveLoading ? 'ANALIZANDO' : 'LIVE'}
+                        </span>
                       )}
                     </div>
                     {scenario.id === 'crisis' && <ShieldAlert className="w-3 h-3 text-danger" />}
@@ -816,33 +848,154 @@ export default function App() {
                       if (!node) return null;
                       const fuerza = (node.masa - node.distancia) / 10;
                       const isSelected = selectedSectorId === sector.id;
+                      const comps = deriveSectorComponents(node.masa, node.distancia);
                       let statusLabel = 'BAJA';
                       let valueColor = 'text-danger';
                       if (fuerza > 8) { statusLabel = 'ALTA'; valueColor = 'text-accent'; }
                       else if (fuerza >= 2) { statusLabel = 'MEDIA'; valueColor = 'text-ink/60'; }
+
+                      const toggleField = (field: 'masa' | 'distancia' | 'friccion') => (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setExpandedSectorField(prev =>
+                          prev?.sectorId === sector.id && prev.field === field ? null : { sectorId: sector.id, field }
+                        );
+                      };
+                      const isExpanded = (field: 'masa' | 'distancia' | 'friccion') =>
+                        expandedSectorField?.sectorId === sector.id && expandedSectorField.field === field;
+
                       return (
-                        <button
+                        <div
                           key={sector.id}
-                          onClick={() => setSelectedSectorId(isSelected ? null : sector.id)}
                           className={cn(
                             'w-full p-3 rounded-lg border transition-all text-left',
                             node.isGravityCenter ? 'bg-accent/5 border-accent/30' : 'bg-surface/20 border-border opacity-60 hover:opacity-90',
                             isSelected && 'border-accent ring-1 ring-accent/50'
                           )}
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] font-mono text-ink/70 uppercase">{sector.fullName}</span>
-                            {node.isGravityCenter && <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
-                          </div>
-                          <div className="flex items-center justify-between text-[9px] font-mono">
+                          {/* Header — click card body to select sector */}
+                          <button
+                            className="w-full text-left"
+                            onClick={() => setSelectedSectorId(isSelected ? null : sector.id)}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[9px] font-mono text-ink/70 uppercase">{sector.fullName}</span>
+                              {node.isGravityCenter && <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
+                            </div>
+                          </button>
+
+                          {/* MASA row */}
+                          <button
+                            className="w-full flex items-center justify-between text-[9px] font-mono rounded px-1 -mx-1 py-0.5 hover:bg-ink/5 transition-colors"
+                            onClick={toggleField('masa')}
+                          >
+                            <span className="text-accent/70">MASA</span>
+                            <span className="text-accent">{node.masa}</span>
+                          </button>
+                          {isExpanded('masa') && (
+                            <div className="bg-ink/5 rounded p-2 mt-0.5 mb-1 space-y-1.5">
+                              <p className="text-[7px] font-mono text-ink/30 italic">M = 0.25×Ret + 0.25×Crec + 0.25×Liq + 0.25×Conf</p>
+                              <div className="grid grid-cols-2 gap-1">
+                                {([
+                                  { label: 'Retorno (w=0.25)', val: comps.masaComponents.retorno, color: 'bg-accent' },
+                                  { label: 'Crecim. (w=0.25)', val: comps.masaComponents.crecimiento, color: 'bg-accent/70' },
+                                  { label: 'Liquidez (w=0.25)', val: comps.masaComponents.liquidezActivo, color: 'bg-accent/50' },
+                                  { label: 'Confianza (w=0.25)', val: comps.masaComponents.confianza, color: 'bg-accent/30' },
+                                ] as const).map(item => (
+                                  <div key={item.label} className="space-y-0.5">
+                                    <div className="flex justify-between text-[7px] font-mono">
+                                      <span className="text-ink/40">{item.label}</span>
+                                      <span className="text-ink/60">{item.val}</span>
+                                    </div>
+                                    <div className="h-0.5 bg-ink/10 rounded-full overflow-hidden">
+                                      <div className={`h-full ${item.color}`} style={{ width: `${Math.min(100, item.val)}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-[7px] font-mono text-accent/50 text-right">
+                                = 0.25×({comps.masaComponents.retorno}+{comps.masaComponents.crecimiento}+{comps.masaComponents.liquidezActivo}+{comps.masaComponents.confianza}) = {node.masa}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* DISTANCIA row */}
+                          <button
+                            className="w-full flex items-center justify-between text-[9px] font-mono rounded px-1 -mx-1 py-0.5 hover:bg-ink/5 transition-colors"
+                            onClick={toggleField('distancia')}
+                          >
+                            <span className="text-danger/70">DISTANCIA</span>
+                            <span className="text-danger">{node.distancia}</span>
+                          </button>
+                          {isExpanded('distancia') && (
+                            <div className="bg-ink/5 rounded p-2 mt-0.5 mb-1 space-y-1.5">
+                              <p className="text-[7px] font-mono text-ink/30 italic">r = Vol + Spread + (1-ρ)×100</p>
+                              <div className="grid grid-cols-3 gap-1">
+                                {([
+                                  { label: 'Volatil.', val: comps.distanciaComponents.volatilidad, color: 'bg-danger/80' },
+                                  { label: 'Spread',   val: comps.distanciaComponents.spread,      color: 'bg-danger/60' },
+                                  { label: '1-Corr',   val: Math.round((1 - comps.distanciaComponents.correlacion) * 100), color: 'bg-danger/40' },
+                                ] as const).map(item => (
+                                  <div key={item.label} className="space-y-0.5">
+                                    <div className="flex justify-between text-[7px] font-mono">
+                                      <span className="text-ink/40">{item.label}</span>
+                                      <span className="text-ink/60">{item.val}</span>
+                                    </div>
+                                    <div className="h-0.5 bg-ink/10 rounded-full overflow-hidden">
+                                      <div className={`h-full ${item.color}`} style={{ width: `${item.val}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-[7px] font-mono text-danger/50 text-right">
+                                r_raw={comps.distanciaComponents.rawSum} → ρ={comps.distanciaComponents.correlacion} → norm={node.distancia}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* FRICCIÓN row */}
+                          <button
+                            className="w-full flex items-center justify-between text-[9px] font-mono rounded px-1 -mx-1 py-0.5 hover:bg-ink/5 transition-colors mb-1"
+                            onClick={toggleField('friccion')}
+                          >
+                            <span className="text-ink/40">FRICCIÓN</span>
+                            <span className="text-ink/60">10</span>
+                          </button>
+                          {isExpanded('friccion') && (
+                            <div className="bg-ink/5 rounded p-2 mt-0.5 mb-1 space-y-1.5">
+                              <p className="text-[7px] font-mono text-ink/30 italic">F = (Bid-Ask + Restric + (100-Profund)) / 3</p>
+                              <div className="grid grid-cols-3 gap-1">
+                                {([
+                                  { label: 'Bid-Ask',  val: comps.friccionComponents.bidAskSpread, color: 'bg-ink/30' },
+                                  { label: 'Restric.', val: comps.friccionComponents.restricciones, color: 'bg-ink/20' },
+                                  { label: 'Profund.', val: comps.friccionComponents.profundidad,   color: 'bg-accent/20' },
+                                ] as const).map(item => (
+                                  <div key={item.label} className="space-y-0.5">
+                                    <div className="flex justify-between text-[7px] font-mono">
+                                      <span className="text-ink/40">{item.label}</span>
+                                      <span className="text-ink/60">{item.val}</span>
+                                    </div>
+                                    <div className="h-0.5 bg-ink/10 rounded-full overflow-hidden">
+                                      <div className={`h-full ${item.color}`} style={{ width: `${item.val}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-[7px] font-mono text-ink/30 text-right">
+                                ({comps.friccionComponents.bidAskSpread}+{comps.friccionComponents.restricciones}+{100 - comps.friccionComponents.profundidad}) / 3 = 10
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Fuerza G */}
+                          <div className="flex items-center justify-between text-[9px] font-mono mt-0.5">
                             <span className="text-ink/30">Fuerza G · {statusLabel}</span>
                             <span className={valueColor}>{fuerza.toFixed(2)}</span>
                           </div>
-                          <div className="mt-1.5 h-0.5 bg-ink/5 rounded-full overflow-hidden">
+                          <div className="mt-1 h-0.5 bg-ink/5 rounded-full overflow-hidden">
                             <div className={cn('h-full rounded-full', node.isGravityCenter ? 'bg-accent' : 'bg-ink/20')}
                               style={{ width: `${Math.min(100, Math.max(0, (fuerza / 10) * 100))}%` }} />
                           </div>
-                        </button>
+                        </div>
                       );
                     });
                   })()}
