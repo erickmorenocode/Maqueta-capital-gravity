@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "C:\\Users\\ErickMoreno\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "C:\\Users\\ErickMoreno\\Desktop\\PROYECTOS\\Maqueta-capital-gravity",
+      "type": "stdio",
+      "env": []
+    }
+  }
+}

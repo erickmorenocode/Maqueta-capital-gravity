@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__code-review-graph__semantic_search_nodes_tool",
+      "mcp__ide__getDiagnostics",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "mcp__plugin_context-mode_context-mode__ctx_fetch_and_index",
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\ErickMoreno\\\\.claude\" -Depth 2 -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ErickMoreno\\\\.claude\" -Depth 1 -ErrorAction SilentlyContinue | Select-Object -Property Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Sort-Object Name | Format-Table -AutoSize)",
+      "PowerShell(Test-Path *)",
+      "Bash(bun --version)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(~/.bun/bin/bun --version)",
+      "Bash(git clone *)",
+      "Read(//c/Users/ErickMoreno/.claude/skills/gstack/**)",
+      "Bash(bash ./setup)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute_file"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ]
+}

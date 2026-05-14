@@ -8,3 +8,4 @@ coverage/
 !.env.example
 # Added by code-review-graph
 .code-review-graph/
+.next/
