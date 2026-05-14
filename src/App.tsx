@@ -15,7 +15,7 @@ import {
   ArrowDownLeft
 } from 'lucide-react';
 import { SCENARIOS, GEO_POINTS, MarketScenario, GeoPoint, DEFAULT_PRICES, MarketPrices } from './data';
-import { WorldMap } from './components/WorldMap';
+import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
 import { fetchLiveMarketGravity } from './services/geminiService';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -30,6 +30,8 @@ export default function App() {
   const [isLiveLoading, setIsLiveLoading] = useState(false);
   const [scenarios, setScenarios] = useState<MarketScenario[]>(SCENARIOS);
   const [selectedPoint, setSelectedPoint] = useState<GeoPoint | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedSectorId, setSelectedSectorId] = useState<string | null>(null);
 
   const activeScenarioRef = useRef(activeScenario);
   useEffect(() => { activeScenarioRef.current = activeScenario; }, [activeScenario]);
@@ -315,12 +317,131 @@ export default function App() {
         {/* Main Content - Map */}
         <div className="lg:col-span-6 space-y-6">
           <div className="h-[600px] relative">
-            <WorldMap 
-              scenario={activeScenario} 
-              geoPoints={GEO_POINTS} 
-              onPointClick={(point) => setSelectedPoint(point)}
+            <WorldMap
+              scenario={activeScenario}
+              geoPoints={GEO_POINTS}
+              onPointClick={(point) => { setSelectedPoint(point); setSelectedSectorId(null); }}
+              onCountrySelect={(name) => { setSelectedCountry(name); if (!name) setSelectedSectorId(null); }}
+              onSectorClick={(sectorId) => { setSelectedSectorId(sectorId); setSelectedPoint(null); }}
             />
             
+            {/* Sector Drill-down Overlay */}
+            <AnimatePresence>
+              {selectedSectorId && selectedCountry && (() => {
+                const { nodes, flows } = getSectorData(activeScenario.id);
+                const node = nodes.find(n => n.id === selectedSectorId);
+                const sector = SECTORS.find(s => s.id === selectedSectorId);
+                if (!node || !sector) return null;
+                const fuerza = (node.masa - node.distancia) / 10;
+                const outFlows = flows.filter(f => f.from === selectedSectorId);
+                const inFlows = flows.filter(f => f.to === selectedSectorId);
+                return (
+                  <motion.div
+                    key="sector-overlay"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="absolute top-4 left-4 glass p-6 rounded-xl w-[300px] z-20 max-h-[90vh] overflow-y-auto custom-scrollbar"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className={cn('w-2 h-2 rounded-full', node.isGravityCenter ? 'bg-accent animate-pulse' : 'bg-white/20')} />
+                        <h3 className="text-sm font-bold uppercase tracking-tight">{sector.fullName}</h3>
+                      </div>
+                      <button onClick={() => setSelectedSectorId(null)} className="p-1 hover:bg-white/10 rounded transition-colors">
+                        <X className="w-4 h-4 text-white/40" />
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between text-[10px] font-mono">
+                        <span className="text-white/40 uppercase">Estado</span>
+                        <span className={node.isGravityCenter ? 'text-accent' : 'text-white/40'}>
+                          {node.isGravityCenter ? 'Centro Activo' : 'Sector Secundario'}
+                        </span>
+                      </div>
+                      <div className="pt-3 border-t border-white/5 space-y-3">
+                        <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-1">
+                          <Zap className="w-3 h-3" />Desglose de Gravedad
+                        </h4>
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[9px] font-mono">
+                              <span className="text-white/60">MASA (Atractivo)</span>
+                              <span className="text-accent">{node.masa}%</span>
+                            </div>
+                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${node.masa}%` }} className="h-full bg-accent" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[9px] font-mono">
+                              <span className="text-white/60">DISTANCIA (Riesgo)</span>
+                              <span className="text-danger">{node.distancia}%</span>
+                            </div>
+                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${node.distancia}%` }} className="h-full bg-danger/60" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[9px] font-mono">
+                              <span className="text-white/60">FRICCIÓN (Liquidez)</span>
+                              <span className="text-white/40">10%</span>
+                            </div>
+                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-full bg-white/20 w-[10%]" />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-2 rounded bg-accent/5 border border-accent/10 text-center">
+                          <p className="text-[9px] font-mono text-accent">
+                            ({node.masa} - {node.distancia}) / 10 = {fuerza.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="pt-3 border-t border-white/5 space-y-3">
+                        <div>
+                          <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest mb-2 flex items-center gap-1">
+                            <ArrowUpRight className="w-3 h-3" />Salida de Capital
+                          </h4>
+                          <div className="space-y-1.5">
+                            {outFlows.length > 0 ? outFlows.map((flow, i) => {
+                              const dest = SECTORS.find(s => s.id === flow.to);
+                              return (
+                                <div key={i} className="p-2 rounded bg-white/5 border border-white/5">
+                                  <div className="flex justify-between">
+                                    <span className="text-[9px] font-mono text-white/70">Hacia {dest?.fullName ?? flow.to}</span>
+                                    <span className="text-[9px] font-mono text-accent">{(flow.strength * 100).toFixed(0)}%</span>
+                                  </div>
+                                </div>
+                              );
+                            }) : <p className="text-[9px] font-mono text-white/20 italic">Sin salidas significativas</p>}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest mb-2 flex items-center gap-1">
+                            <ArrowDownLeft className="w-3 h-3" />Entrada de Capital
+                          </h4>
+                          <div className="space-y-1.5">
+                            {inFlows.length > 0 ? inFlows.map((flow, i) => {
+                              const orig = SECTORS.find(s => s.id === flow.from);
+                              return (
+                                <div key={i} className="p-2 rounded bg-accent/5 border border-accent/10">
+                                  <div className="flex justify-between">
+                                    <span className="text-[9px] font-mono text-accent">Desde {orig?.fullName ?? flow.from}</span>
+                                    <span className="text-[9px] font-mono text-accent">{(flow.strength * 100).toFixed(0)}%</span>
+                                  </div>
+                                </div>
+                              );
+                            }) : <p className="text-[9px] font-mono text-white/20 italic">Sin entradas significativas</p>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
+
             {/* Overlay Info - Selected Point Details */}
             <AnimatePresence>
               {selectedPoint && (
@@ -546,9 +667,57 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right Sidebar - Asset Gravity */}
+        {/* Right Sidebar - Asset Gravity / Country Sectors */}
         <div className="lg:col-span-3 space-y-6">
           <section className="space-y-4">
+            {selectedCountry ? (
+              <>
+                <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+                  <BarChart3 className="w-3 h-3" />
+                  Sectores · {selectedCountry}
+                </h2>
+                <div className="space-y-2">
+                  {(() => {
+                    const { nodes } = getSectorData(activeScenario.id);
+                    return SECTORS.map(sector => {
+                      const node = nodes.find(n => n.id === sector.id);
+                      if (!node) return null;
+                      const fuerza = (node.masa - node.distancia) / 10;
+                      const isSelected = selectedSectorId === sector.id;
+                      let statusLabel = 'BAJA';
+                      let valueColor = 'text-danger';
+                      if (fuerza > 8) { statusLabel = 'ALTA'; valueColor = 'text-accent'; }
+                      else if (fuerza >= 2) { statusLabel = 'MEDIA'; valueColor = 'text-white/60'; }
+                      return (
+                        <button
+                          key={sector.id}
+                          onClick={() => setSelectedSectorId(isSelected ? null : sector.id)}
+                          className={cn(
+                            'w-full p-3 rounded-lg border transition-all text-left',
+                            node.isGravityCenter ? 'bg-accent/5 border-accent/30' : 'bg-surface/20 border-border opacity-60 hover:opacity-90',
+                            isSelected && 'border-accent ring-1 ring-accent/50'
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[9px] font-mono text-white/70 uppercase">{sector.fullName}</span>
+                            {node.isGravityCenter && <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
+                          </div>
+                          <div className="flex items-center justify-between text-[9px] font-mono">
+                            <span className="text-white/30">Fuerza G · {statusLabel}</span>
+                            <span className={valueColor}>{fuerza.toFixed(2)}</span>
+                          </div>
+                          <div className="mt-1.5 h-0.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className={cn('h-full rounded-full', node.isGravityCenter ? 'bg-accent' : 'bg-white/20')}
+                              style={{ width: `${Math.min(100, Math.max(0, (fuerza / 10) * 100))}%` }} />
+                          </div>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </>
+            ) : (
+              <>
             <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
               <TrendingUp className="w-3 h-3" />
               Centros de Gravedad de Activos
@@ -676,6 +845,8 @@ export default function App() {
                 );
               })}
             </div>
+              </>
+            )}
           </section>
 
           <section className="p-6 rounded-xl border border-accent/20 bg-accent/5 relative overflow-hidden group">

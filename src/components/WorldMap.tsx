@@ -8,48 +8,78 @@ interface WorldMapProps {
   scenario: MarketScenario;
   geoPoints: GeoPoint[];
   onPointClick: (point: GeoPoint) => void;
+  onCountrySelect?: (countryName: string | null) => void;
+  onSectorClick?: (sectorId: string) => void;
 }
 
 const ISO_NAMES: Record<string, string> = {
-  '4': 'Afganistán', '8': 'Albania', '12': 'Argelia', '24': 'Angola',
-  '32': 'Argentina', '36': 'Australia', '40': 'Austria', '50': 'Bangladesh',
-  '56': 'Bélgica', '76': 'Brasil', '100': 'Bulgaria', '116': 'Camboya',
-  '124': 'Canadá', '144': 'Sri Lanka', '152': 'Chile', '156': 'China',
-  '170': 'Colombia', '180': 'Congo (RDC)', '203': 'Rep. Checa',
-  '208': 'Dinamarca', '218': 'Ecuador', '818': 'Egipto', '231': 'Etiopía',
-  '246': 'Finlandia', '250': 'Francia', '276': 'Alemania', '288': 'Ghana',
-  '300': 'Grecia', '320': 'Guatemala', '340': 'Honduras', '356': 'India',
-  '360': 'Indonesia', '364': 'Irán', '368': 'Irak', '372': 'Irlanda',
-  '376': 'Israel', '380': 'Italia', '392': 'Japón', '398': 'Kazajistán',
-  '400': 'Jordania', '404': 'Kenia', '410': 'Corea del Sur', '414': 'Kuwait',
-  '484': 'México', '504': 'Marruecos', '528': 'Países Bajos',
-  '554': 'Nueva Zelanda', '566': 'Nigeria', '578': 'Noruega',
-  '586': 'Pakistán', '604': 'Perú', '608': 'Filipinas', '616': 'Polonia',
-  '620': 'Portugal', '642': 'Rumanía', '643': 'Rusia', '682': 'Arabia Saudita',
-  '710': 'Sudáfrica', '724': 'España', '752': 'Suecia', '756': 'Suiza',
-  '764': 'Tailandia', '792': 'Turquía', '804': 'Ucrania', '784': 'EAU',
-  '826': 'Reino Unido', '840': 'EE.UU.', '858': 'Uruguay',
-  '862': 'Venezuela', '704': 'Vietnam', '716': 'Zimbabue',
+  '4': 'Afganistán', '8': 'Albania', '12': 'Argelia', '20': 'Andorra',
+  '24': 'Angola', '28': 'Antigua y Barbuda', '32': 'Argentina',
+  '36': 'Australia', '40': 'Austria', '44': 'Bahamas', '48': 'Baréin',
+  '50': 'Bangladés', '52': 'Barbados', '56': 'Bélgica', '64': 'Bután',
+  '68': 'Bolivia', '70': 'Bosnia-Herzegovina', '72': 'Botsuana',
+  '76': 'Brasil', '96': 'Brunéi', '100': 'Bulgaria', '104': 'Myanmar',
+  '108': 'Burundi', '112': 'Bielorrusia', '116': 'Camboya', '120': 'Camerún',
+  '124': 'Canadá', '132': 'Cabo Verde', '140': 'Rep. Centroafricana',
+  '144': 'Sri Lanka', '148': 'Chad', '152': 'Chile', '156': 'China',
+  '170': 'Colombia', '174': 'Comoras', '178': 'Congo', '180': 'Congo (RDC)',
+  '188': 'Costa Rica', '191': 'Croacia', '192': 'Cuba', '196': 'Chipre',
+  '203': 'Rep. Checa', '204': 'Benín', '208': 'Dinamarca', '212': 'Dominica',
+  '214': 'Rep. Dominicana', '218': 'Ecuador', '222': 'El Salvador',
+  '226': 'Guinea Ecuatorial', '231': 'Etiopía', '232': 'Eritrea',
+  '233': 'Estonia', '242': 'Fiyi', '246': 'Finlandia', '250': 'Francia',
+  '266': 'Gabón', '268': 'Georgia', '276': 'Alemania', '288': 'Ghana',
+  '300': 'Grecia', '320': 'Guatemala', '324': 'Guinea', '328': 'Guyana',
+  '332': 'Haití', '340': 'Honduras', '348': 'Hungría', '352': 'Islandia',
+  '356': 'India', '360': 'Indonesia', '364': 'Irán', '368': 'Irak',
+  '372': 'Irlanda', '376': 'Israel', '380': 'Italia', '384': 'Costa de Marfil',
+  '388': 'Jamaica', '392': 'Japón', '398': 'Kazajistán', '400': 'Jordania',
+  '404': 'Kenia', '408': 'Corea del Norte', '410': 'Corea del Sur',
+  '414': 'Kuwait', '417': 'Kirguistán', '418': 'Laos', '422': 'Líbano',
+  '426': 'Lesoto', '428': 'Letonia', '430': 'Liberia', '434': 'Libia',
+  '438': 'Liechtenstein', '440': 'Lituania', '442': 'Luxemburgo',
+  '450': 'Madagascar', '454': 'Malaui', '458': 'Malasia', '462': 'Maldivas',
+  '466': 'Malí', '478': 'Mauritania', '480': 'Mauricio', '484': 'México',
+  '496': 'Mongolia', '498': 'Moldavia', '499': 'Montenegro',
+  '504': 'Marruecos', '508': 'Mozambique', '516': 'Namibia', '524': 'Nepal',
+  '528': 'Países Bajos', '548': 'Vanuatu', '554': 'Nueva Zelanda',
+  '558': 'Nicaragua', '562': 'Níger', '566': 'Nigeria', '578': 'Noruega',
+  '586': 'Pakistán', '591': 'Panamá', '598': 'Papúa Nueva Guinea',
+  '600': 'Paraguay', '604': 'Perú', '608': 'Filipinas', '616': 'Polonia',
+  '620': 'Portugal', '624': 'Guinea-Bisáu', '634': 'Catar',
+  '642': 'Rumanía', '643': 'Rusia', '646': 'Ruanda',
+  '682': 'Arabia Saudita', '686': 'Senegal', '688': 'Serbia',
+  '694': 'Sierra Leona', '703': 'Eslovaquia', '704': 'Vietnam',
+  '705': 'Eslovenia', '706': 'Somalia', '710': 'Sudáfrica',
+  '716': 'Zimbabue', '724': 'España', '728': 'Sudán del Sur', '729': 'Sudán',
+  '740': 'Surinam', '752': 'Suecia', '756': 'Suiza', '760': 'Siria',
+  '762': 'Tayikistán', '764': 'Tailandia', '768': 'Togo',
+  '780': 'Trinidad y Tobago', '784': 'EAU', '788': 'Túnez',
+  '792': 'Turquía', '795': 'Turkmenistán', '800': 'Uganda',
+  '804': 'Ucrania', '807': 'Macedonia del Norte', '818': 'Egipto',
+  '826': 'Reino Unido', '834': 'Tanzania', '840': 'EE.UU.',
+  '858': 'Uruguay', '860': 'Uzbekistán', '862': 'Venezuela',
+  '887': 'Yemen', '894': 'Zambia',
 };
 
-const SECTORS = [
-  { id: 'technology',         name: 'TECNOLOG.',  angle: -90  },
-  { id: 'communication',      name: 'COMUNIC.',   angle: -57  },
-  { id: 'cons_discretionary', name: 'C.DISCR.',   angle: -25  },
-  { id: 'cons_staples',       name: 'C.BÁSICO',   angle: 8    },
-  { id: 'energy',             name: 'ENERGÍA',    angle: 41   },
-  { id: 'financial',          name: 'FINANCIERO', angle: 74   },
-  { id: 'healthcare',         name: 'SALUD',      angle: 106  },
-  { id: 'industrials',        name: 'INDUSTR.',   angle: 139  },
-  { id: 'real_estate',        name: 'INMOB.',     angle: 172  },
-  { id: 'basic_materials',    name: 'MATER.',     angle: 205  },
-  { id: 'utilities',          name: 'UTILITIES',  angle: 237  },
+export const SECTORS = [
+  { id: 'technology',         name: 'TECNOLOG.',  fullName: 'Technology',             angle: -90  },
+  { id: 'communication',      name: 'COMUNIC.',   fullName: 'Communic. Services',     angle: -57  },
+  { id: 'cons_discretionary', name: 'C.DISCR.',   fullName: 'Cons. Discretionary',    angle: -25  },
+  { id: 'cons_staples',       name: 'C.BÁSICO',   fullName: 'Consumer Staples',       angle: 8    },
+  { id: 'energy',             name: 'ENERGÍA',    fullName: 'Energy',                 angle: 41   },
+  { id: 'financial',          name: 'FINANCIERO', fullName: 'Financials',             angle: 74   },
+  { id: 'healthcare',         name: 'SALUD',      fullName: 'Health Care',            angle: 106  },
+  { id: 'industrials',        name: 'INDUSTR.',   fullName: 'Industrials',            angle: 139  },
+  { id: 'real_estate',        name: 'INMOB.',     fullName: 'Real Estate',            angle: 172  },
+  { id: 'basic_materials',    name: 'MATER.',     fullName: 'Materials',              angle: 205  },
+  { id: 'utilities',          name: 'UTILITIES',  fullName: 'Utilities',              angle: 237  },
 ];
 
-interface SectorFlow { from: string; to: string; strength: number; }
-interface SectorNode { id: string; masa: number; distancia: number; isGravityCenter: boolean; }
+export interface SectorFlow { from: string; to: string; strength: number; }
+export interface SectorNode { id: string; masa: number; distancia: number; isGravityCenter: boolean; }
 
-function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows: SectorFlow[] } {
+export function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows: SectorFlow[] } {
   const FRICCION = 10;
 
   const metricsMap: Record<string, Record<string, { masa: number; distancia: number }>> = {
@@ -171,7 +201,7 @@ function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows: Sector
   return { nodes, flows };
 }
 
-export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPointClick }) => {
+export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPointClick, onCountrySelect, onSectorClick }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
@@ -180,6 +210,10 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const svgSelRef = useRef<d3.Selection<SVGSVGElement, unknown, null, undefined> | null>(null);
   const selectedFeatureRef = useRef<any>(null);
+  const onCountrySelectRef = useRef(onCountrySelect);
+  const onSectorClickRef = useRef(onSectorClick);
+  useEffect(() => { onCountrySelectRef.current = onCountrySelect; });
+  useEffect(() => { onSectorClickRef.current = onSectorClick; });
 
   const WIDTH = 1000;
   const HEIGHT = 600;
@@ -250,6 +284,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
             .attr('stroke-width', 1);
 
           setSelectedCountry(name);
+          onCountrySelectRef.current?.(name);
 
           const [[x0, y0], [x1, y1]] = path.bounds(d);
           const bw = Math.max(x1 - x0, 1);
@@ -350,7 +385,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
 
       // Redraw sector overlay if country already selected (scenario change)
       if (selectedFeatureRef.current) {
-        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id);
+        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current);
       }
     });
 
@@ -364,12 +399,13 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
     if (!g || !path) return;
     g.selectAll('.country-sectors').remove();
     if (!selectedCountry || !selectedFeatureRef.current) return;
-    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id);
+    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current);
   }, [selectedCountry, scenario.id]);
 
   const handleReset = () => {
     setSelectedCountry(null);
     selectedFeatureRef.current = null;
+    onCountrySelectRef.current?.(null);
 
     if (gRef.current) {
       gRef.current.selectAll('path.country')
@@ -442,7 +478,8 @@ function drawSectorOverlay(
   path: d3.GeoPath,
   feature: any,
   countryName: string,
-  scenarioId: string
+  scenarioId: string,
+  onSectorClick?: (sectorId: string) => void
 ) {
   g.selectAll('.country-sectors').remove();
 
@@ -521,7 +558,9 @@ function drawSectorOverlay(
     const y = cy + radius * Math.sin(angle);
 
     const nodeGroup = sectorGroup.append('g')
-      .attr('transform', `translate(${x}, ${y})`);
+      .attr('transform', `translate(${x}, ${y})`)
+      .style('cursor', 'pointer')
+      .on('click', (event: MouseEvent) => { event.stopPropagation(); onSectorClick?.(sector.id); });
 
     if (node.isGravityCenter) {
       nodeGroup.append('circle')
