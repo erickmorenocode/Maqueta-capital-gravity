@@ -394,7 +394,7 @@ export default function App() {
             {/* Sector Drill-down Overlay */}
             <AnimatePresence>
               {selectedSectorId && selectedCountry && (() => {
-                const { nodes, flows } = getSectorData(activeScenario.id);
+                const { nodes, flows } = getSectorData(activeScenario.id, activeScenario.macroRegime);
                 const node = nodes.find(n => n.id === selectedSectorId);
                 const sector = SECTORS.find(s => s.id === selectedSectorId);
                 if (!node || !sector) return null;
@@ -916,7 +916,7 @@ export default function App() {
                 </h2>
                 <div className="space-y-2">
                   {(() => {
-                    const { nodes } = getSectorData(activeScenario.id);
+                    const { nodes } = getSectorData(activeScenario.id, activeScenario.macroRegime);
                     return SECTORS.map(sector => {
                       const node = nodes.find(n => n.id === sector.id);
                       if (!node) return null;

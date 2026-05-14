@@ -85,7 +85,20 @@ export const SECTORS = [
 export interface SectorFlow { from: string; to: string; strength: number; }
 export interface SectorNode { id: string; masa: number; distancia: number; isGravityCenter: boolean; }
 
-export function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows: SectorFlow[] } {
+function mapRegimeToScenario(regime?: string): string {
+  switch (regime) {
+    case 'risk-on':   return 'dovish';
+    case 'risk-off':  return 'hawkish';
+    case 'crisis':    return 'crisis';
+    case 'liquidity': return 'liquidity';
+    default:          return 'dovish';
+  }
+}
+
+export function getSectorData(scenarioId: string, macroRegime?: string): { nodes: SectorNode[]; flows: SectorFlow[] } {
+  const effectiveId = scenarioId === 'live' || scenarioId === 'current'
+    ? mapRegimeToScenario(macroRegime)
+    : scenarioId;
   const FRICCION = 10;
 
   const metricsMap: Record<string, Record<string, { masa: number; distancia: number }>> = {
@@ -157,7 +170,7 @@ export function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows:
     utilities:          { masa: 60, distancia: 40 },
   };
 
-  const metrics = metricsMap[scenarioId] ?? fallback;
+  const metrics = metricsMap[effectiveId] ?? fallback;
 
   const nodes: SectorNode[] = SECTORS.map(s => {
     const m = metrics[s.id] ?? { masa: 50, distancia: 50 };
@@ -198,7 +211,7 @@ export function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows:
     ],
   };
 
-  const flows = flowsMap[scenarioId] ?? [
+  const flows = flowsMap[effectiveId] ?? [
     { from: 'technology',    to: 'financial',          strength: 0.50 },
     { from: 'cons_staples',  to: 'cons_discretionary', strength: 0.40 },
     { from: 'energy',        to: 'industrials',        strength: 0.40 },
@@ -401,7 +414,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
 
       // Redraw sector overlay if country already selected (scenario change)
       if (selectedFeatureRef.current) {
-        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current);
+        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current, scenario.macroRegime);
       }
     });
 
@@ -415,7 +428,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
     if (!g || !path) return;
     g.selectAll('.country-sectors').remove();
     if (!selectedCountry || !selectedFeatureRef.current) return;
-    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current);
+    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current, scenario.macroRegime);
   }, [selectedCountry, scenario.id]);
 
   const handleReset = () => {
@@ -495,7 +508,8 @@ function drawSectorOverlay(
   feature: any,
   countryName: string,
   scenarioId: string,
-  onSectorClick?: (sectorId: string) => void
+  onSectorClick?: (sectorId: string) => void,
+  macroRegime?: string
 ) {
   g.selectAll('.country-sectors').remove();
 
@@ -511,7 +525,7 @@ function drawSectorOverlay(
   const nodeR = radius * 0.14;
   const textSize = Math.min(radius * 0.09, 6);
 
-  const { nodes, flows } = getSectorData(scenarioId);
+  const { nodes, flows } = getSectorData(scenarioId, macroRegime);
   const sectorGroup = g.append('g').attr('class', 'country-sectors');
 
   // Background glow on center
