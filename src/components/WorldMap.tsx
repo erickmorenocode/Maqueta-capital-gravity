@@ -245,8 +245,8 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
             .attr('stroke-width', 0.5);
 
           d3.select(this)
-            .attr('fill', '#1a2e1a')
-            .attr('stroke', '#00ff88')
+            .attr('fill', '#0d1b2e')
+            .attr('stroke', '#2563eb')
             .attr('stroke-width', 1);
 
           setSelectedCountry(name);
@@ -461,7 +461,7 @@ function drawSectorOverlay(
     .attr('cx', cx)
     .attr('cy', cy)
     .attr('r', radius * 0.15)
-    .attr('fill', '#00ff88')
+    .attr('fill', '#FBBF24')
     .attr('opacity', 0.04);
 
   // Draw flow arcs (from sector → through center → to sector)
@@ -481,7 +481,7 @@ function drawSectorOverlay(
     sectorGroup.append('path')
       .attr('d', `M${fx},${fy} Q${cx},${cy} ${tx},${ty}`)
       .attr('fill', 'none')
-      .attr('stroke', '#00ff88')
+      .attr('stroke', '#FBBF24')
       .attr('stroke-width', Math.max(flow.strength * 1.5, 0.4))
       .attr('opacity', 0.35 + flow.strength * 0.3)
       .attr('class', 'animate-flow');
@@ -502,7 +502,7 @@ function drawSectorOverlay(
         ${ax - uy * arrowSize - ux * arrowSize},${ay + ux * arrowSize - uy * arrowSize}
         ${ax + uy * arrowSize - ux * arrowSize},${ay - ux * arrowSize - uy * arrowSize}
       `)
-      .attr('fill', '#00ff88')
+      .attr('fill', '#FBBF24')
       .attr('opacity', 0.5 + flow.strength * 0.3);
   });
 
@@ -522,7 +522,7 @@ function drawSectorOverlay(
       nodeGroup.append('circle')
         .attr('r', nodeR * 1.5)
         .attr('fill', 'none')
-        .attr('stroke', '#00ff88')
+        .attr('stroke', '#FBBF24')
         .attr('stroke-width', 0.5)
         .attr('opacity', 0.5)
         .append('animate')
@@ -535,15 +535,15 @@ function drawSectorOverlay(
 
     nodeGroup.append('circle')
       .attr('r', nodeR)
-      .attr('fill', node.isGravityCenter ? '#00ff88' : '#2a2a2a')
-      .attr('stroke', node.isGravityCenter ? '#00ff88' : '#555')
+      .attr('fill', node.isGravityCenter ? '#FBBF24' : '#1e3a5f')
+      .attr('stroke', node.isGravityCenter ? '#FBBF24' : '#2563eb')
       .attr('stroke-width', 0.5);
 
     // Masa indicator ring
     nodeGroup.append('circle')
       .attr('r', nodeR * (0.8 + node.masa / 200))
       .attr('fill', 'none')
-      .attr('stroke', node.isGravityCenter ? '#00ff88' : '#444')
+      .attr('stroke', node.isGravityCenter ? '#FBBF24' : '#1e3a5f')
       .attr('stroke-width', 0.3)
       .attr('opacity', 0.4);
 
@@ -552,7 +552,7 @@ function drawSectorOverlay(
       .text(sector.name)
       .attr('y', labelOffset)
       .attr('text-anchor', 'middle')
-      .attr('fill', node.isGravityCenter ? '#00ff88' : '#888')
+      .attr('fill', node.isGravityCenter ? '#FBBF24' : '#94A3B8')
       .attr('font-size', `${textSize}px`)
       .attr('font-family', 'monospace')
       .attr('font-weight', 'bold')
@@ -563,7 +563,7 @@ function drawSectorOverlay(
       .text(`${node.masa}`)
       .attr('y', nodeR + textSize + 1)
       .attr('text-anchor', 'middle')
-      .attr('fill', node.isGravityCenter ? '#00ff88' : '#555')
+      .attr('fill', node.isGravityCenter ? '#FBBF24' : '#4B6CB7')
       .attr('font-size', `${textSize * 0.85}px`)
       .attr('font-family', 'monospace')
       .attr('pointer-events', 'none')
@@ -577,7 +577,7 @@ function drawSectorOverlay(
     .attr('y', cy + textSize * 0.4)
     .attr('text-anchor', 'middle')
     .attr('dominant-baseline', 'middle')
-    .attr('fill', '#00ff88')
+    .attr('fill', '#FBBF24')
     .attr('font-size', `${Math.max(textSize * 0.9, 4)}px`)
     .attr('font-family', 'monospace')
     .attr('font-weight', 'bold')
