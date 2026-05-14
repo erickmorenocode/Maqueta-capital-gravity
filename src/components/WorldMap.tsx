@@ -7,6 +7,7 @@ import { GeoPoint, MarketScenario } from '../data';
 interface WorldMapProps {
   scenario: MarketScenario;
   geoPoints: GeoPoint[];
+  theme?: 'dark' | 'light';
   onPointClick: (point: GeoPoint) => void;
   onCountrySelect?: (countryName: string | null) => void;
   onSectorClick?: (sectorId: string) => void;
@@ -206,7 +207,17 @@ export function getSectorData(scenarioId: string): { nodes: SectorNode[]; flows:
   return { nodes, flows };
 }
 
-export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPointClick, onCountrySelect, onSectorClick }) => {
+export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme = 'dark', onPointClick, onCountrySelect, onSectorClick }) => {
+  const isLight = theme === 'light';
+  const mc = {
+    countryFill:   isLight ? '#dde8f4' : '#1a1a1a',
+    countryStroke: isLight ? '#b0c4d8' : '#333',
+    hoverFill:     isLight ? '#c8d8ec' : '#252525',
+    hoverStroke:   isLight ? '#8aaccc' : '#555',
+    accentColor:   isLight ? '#00aa55' : '#00ff88',
+    dotSecondary:  isLight ? 'rgba(30,30,30,0.65)' : 'rgba(255,255,255,0.8)',
+    textSecondary: isLight ? '#1e293b' : '#fff',
+  };
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
@@ -258,18 +269,18 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
         .append('path')
         .attr('class', 'country')
         .attr('d', (d: any) => path(d) ?? '')
-        .attr('fill', '#1a1a1a')
-        .attr('stroke', '#333')
+        .attr('fill', mc.countryFill)
+        .attr('stroke', mc.countryStroke)
         .attr('stroke-width', 0.5)
         .style('cursor', 'pointer')
         .on('mouseenter', function (this: SVGPathElement, _event: any, d: any) {
           if (selectedFeatureRef.current?.id !== d.id) {
-            d3.select(this).attr('fill', '#252525').attr('stroke', '#555');
+            d3.select(this).attr('fill', mc.hoverFill).attr('stroke', mc.hoverStroke);
           }
         })
         .on('mouseleave', function (this: SVGPathElement, _event: any, d: any) {
           if (selectedFeatureRef.current?.id !== d.id) {
-            d3.select(this).attr('fill', '#1a1a1a').attr('stroke', '#333');
+            d3.select(this).attr('fill', mc.countryFill).attr('stroke', mc.countryStroke);
           }
         })
         .on('click', function (this: SVGPathElement, event: any, d: any) {
@@ -279,8 +290,8 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
           selectedFeatureRef.current = d;
 
           g.selectAll('path.country')
-            .attr('fill', '#1a1a1a')
-            .attr('stroke', '#333')
+            .attr('fill', mc.countryFill)
+            .attr('stroke', mc.countryStroke)
             .attr('stroke-width', 0.5);
 
           d3.select(this)
@@ -325,7 +336,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
           pointNode.append('circle')
             .attr('r', 10)
             .attr('fill', 'none')
-            .attr('stroke', '#00ff88')
+            .attr('stroke', mc.accentColor)
             .attr('stroke-width', 2)
             .attr('opacity', 0.6)
             .append('animate')
@@ -338,7 +349,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
           pointNode.append('circle')
             .attr('r', 10)
             .attr('fill', 'none')
-            .attr('stroke', '#00ff88')
+            .attr('stroke', mc.accentColor)
             .attr('stroke-width', 1)
             .attr('opacity', 0.6)
             .append('animate')
@@ -351,13 +362,13 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
 
         pointNode.append('circle')
           .attr('r', isGravityCenter ? 6 : 4)
-          .attr('fill', isGravityCenter ? '#00ff88' : '#666');
+          .attr('fill', isGravityCenter ? mc.accentColor : mc.dotSecondary);
 
         pointNode.append('text')
           .text(point.name.toUpperCase())
           .attr('y', 15)
           .attr('text-anchor', 'middle')
-          .attr('fill', isGravityCenter ? '#00ff88' : '#fff')
+          .attr('fill', isGravityCenter ? mc.accentColor : mc.textSecondary)
           .attr('font-size', '8px')
           .attr('font-weight', 'bold')
           .attr('font-family', 'monospace')
@@ -381,7 +392,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
           flowsGroup.append('path')
             .attr('d', `M${x1},${y1}A${dr},${dr} 0 0,1 ${x2},${y2}`)
             .attr('fill', 'none')
-            .attr('stroke', '#00ff88')
+            .attr('stroke', mc.accentColor)
             .attr('stroke-width', flow.strength * 3)
             .attr('opacity', 0.4)
             .attr('class', 'animate-flow');
@@ -395,7 +406,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
     });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenario, geoPoints, onPointClick]);
+  }, [scenario, geoPoints, onPointClick, theme]);
 
   // Redraw sector overlay when selected country changes
   useEffect(() => {
@@ -414,8 +425,8 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
 
     if (gRef.current) {
       gRef.current.selectAll('path.country')
-        .attr('fill', '#1a1a1a')
-        .attr('stroke', '#333')
+        .attr('fill', mc.countryFill)
+        .attr('stroke', mc.countryStroke)
         .attr('stroke-width', 0.5);
       gRef.current.selectAll('.country-sectors').remove();
     }
@@ -429,7 +440,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
   };
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-black/20 rounded-xl border border-white/5">
+    <div className={`w-full h-full relative overflow-hidden rounded-xl border ${isLight ? 'bg-slate-100/60 border-slate-200' : 'bg-black/20 border-white/5'}`}>
       <svg
         ref={svgRef}
         className="w-full h-full"

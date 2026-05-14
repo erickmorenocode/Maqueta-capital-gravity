@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Globe, 
-  TrendingUp, 
-  ShieldAlert, 
-  Zap, 
-  ArrowRight, 
-  Info, 
+import {
+  Globe,
+  TrendingUp,
+  ShieldAlert,
+  Zap,
+  ArrowRight,
+  Info,
   Activity,
   BarChart3,
   Layers,
   X,
   ArrowUpRight,
-  ArrowDownLeft
+  ArrowDownLeft,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { SCENARIOS, GEO_POINTS, MarketScenario, GeoPoint, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
@@ -32,6 +34,15 @@ export default function App() {
   const [selectedPoint, setSelectedPoint] = useState<GeoPoint | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedSectorId, setSelectedSectorId] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(true);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.remove('light');
+    } else {
+      document.documentElement.classList.add('light');
+    }
+  }, [darkMode]);
 
   const activeScenarioRef = useRef(activeScenario);
   useEffect(() => { activeScenarioRef.current = activeScenario; }, [activeScenario]);
@@ -125,7 +136,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <p className="text-[10px] font-mono text-white/40 uppercase tracking-widest">Motor de Flujo de Liquidez Global v1.0</p>
+            <p className="text-[10px] font-mono text-ink/40 uppercase tracking-widest">Motor de Flujo de Liquidez Global v1.0</p>
           </div>
         </div>
         
@@ -136,7 +147,7 @@ export default function App() {
             className={cn(
               "flex items-center gap-2 px-4 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-all",
               isLiveLoading 
-                ? "bg-white/10 text-white/40 cursor-not-allowed" 
+                ? "bg-ink/10 text-ink/40 cursor-not-allowed" 
                 : "bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30"
             )}
           >
@@ -147,15 +158,15 @@ export default function App() {
             )}
             {isLiveLoading ? 'Analizando Mercados...' : 'Analizar Realidad en Tiempo Real'}
           </button>
-          <div className="hidden md:flex items-center gap-4 text-[10px] font-mono text-white/60">
+          <div className="hidden md:flex items-center gap-4 text-[10px] font-mono text-ink/60">
             <div className="flex items-center gap-1.5">
               <Activity className="w-3 h-3 text-accent" />
               <span>FEED EN VIVO: ACTIVO</span>
             </div>
             {activeScenario.lastUpdated && (
-              <div className="flex items-center gap-1.5 border-l border-white/10 pl-4">
-                <span className="text-white/40">SINC:</span>
-                <span className="text-white/80">
+              <div className="flex items-center gap-1.5 border-l border-ink/10 pl-4">
+                <span className="text-ink/40">SINC:</span>
+                <span className="text-ink/80">
                   {new Date(activeScenario.lastUpdated).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                 </span>
               </div>
@@ -165,6 +176,13 @@ export default function App() {
               <span>CAPAS: MULTI-ACTIVO</span>
             </div>
           </div>
+          <button
+            onClick={() => setDarkMode(d => !d)}
+            className="p-2 rounded border border-border hover:border-accent/40 hover:bg-accent/5 transition-all"
+            title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+          >
+            {darkMode ? <Sun className="w-4 h-4 text-ink/60" /> : <Moon className="w-4 h-4 text-ink/60" />}
+          </button>
           <button className="px-4 py-1.5 rounded bg-accent text-bg text-[10px] font-bold uppercase tracking-widest hover:bg-accent/90 transition-colors">
             Conectar Wallet
           </button>
@@ -176,7 +194,7 @@ export default function App() {
         <div className="lg:col-span-3 space-y-6">
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+              <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
                 <Zap className="w-3 h-3" />
                 Escenarios de Mercado
                 {isLiveLoading && (
@@ -200,7 +218,7 @@ export default function App() {
                     "group relative p-4 rounded-lg border text-left transition-all duration-300 overflow-hidden",
                     activeScenario.id === scenario.id 
                       ? "bg-accent/10 border-accent/50 glow-accent" 
-                      : "bg-surface/40 border-border hover:border-white/20",
+                      : "bg-surface/40 border-border hover:border-ink/20",
                     scenario.id === 'live' && "border-accent/40 bg-accent/5"
                   )}
                 >
@@ -214,7 +232,7 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <span className={cn(
                         "text-xs font-bold uppercase tracking-tight",
-                        activeScenario.id === scenario.id ? "text-accent" : "text-white/80"
+                        activeScenario.id === scenario.id ? "text-accent" : "text-ink/80"
                       )}>
                         {scenario.name}
                       </span>
@@ -225,7 +243,7 @@ export default function App() {
                     {scenario.id === 'crisis' && <ShieldAlert className="w-3 h-3 text-danger" />}
                     {scenario.id === 'hawkish' && <TrendingUp className="w-3 h-3 text-accent" />}
                   </div>
-                  <p className="text-[10px] text-white/40 leading-relaxed font-mono">
+                  <p className="text-[10px] text-ink/40 leading-relaxed font-mono">
                     {scenario.description}
                   </p>
                 </button>
@@ -234,65 +252,65 @@ export default function App() {
           </section>
 
           <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
-            <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+            <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
               <Activity className="w-3 h-3" />
               Leyes de Gravedad Financiera
             </h2>
             <div className="space-y-4">
               <div className="space-y-2">
-                <span className="text-[8px] font-mono text-white/30 uppercase tracking-widest block">Versión Teórica</span>
-                <div className="p-3 rounded bg-black/40 border border-white/5 text-center">
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Versión Teórica</span>
+                <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
                   <p className="text-[10px] font-mono text-accent font-bold italic">
                     Flujo ∝ (A₁ · A₂) / Riesgo²
                   </p>
                 </div>
               </div>
               <div className="space-y-2">
-                <span className="text-[8px] font-mono text-white/30 uppercase tracking-widest block">Versión Práctica</span>
-                <div className="p-3 rounded bg-black/40 border border-white/5 text-center">
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Versión Práctica</span>
+                <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
                   <p className="text-[10px] font-mono text-accent font-bold">
                     Flujo ≈ (Retorno - Riesgo) / Fricción
                   </p>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2 text-[9px] font-mono">
-                <div className="flex flex-col border-b border-white/5 pb-1">
+                <div className="flex flex-col border-b border-ink/5 pb-1">
                   <div className="flex justify-between">
                     <span className="text-accent font-bold">MASA (M)</span>
-                    <span className="text-white/80">Atractivo / Retorno</span>
+                    <span className="text-ink/80">Atractivo / Retorno</span>
                   </div>
-                  <span className="text-[7px] text-white/30 leading-tight">Yield, Crecimiento, Seguridad (Bonos), Estabilidad Accionaria.</span>
+                  <span className="text-[7px] text-ink/30 leading-tight">Yield, Crecimiento, Seguridad (Bonos), Estabilidad Accionaria.</span>
                 </div>
-                <div className="flex flex-col border-b border-white/5 pb-1">
+                <div className="flex flex-col border-b border-ink/5 pb-1">
                   <div className="flex justify-between">
                     <span className="text-danger font-bold">DISTANCIA (d)</span>
-                    <span className="text-white/80">Riesgo / Espacio</span>
+                    <span className="text-ink/80">Riesgo / Espacio</span>
                   </div>
-                  <span className="text-[7px] text-white/30 leading-tight">Volatilidad, Riesgo País, Incertidumbre Macro, Geopolítica.</span>
+                  <span className="text-[7px] text-ink/30 leading-tight">Volatilidad, Riesgo País, Incertidumbre Macro, Geopolítica.</span>
                 </div>
                 <div className="flex flex-col">
                   <div className="flex justify-between">
-                    <span className="text-white/60 font-bold">FRICCIÓN (f)</span>
-                    <span className="text-white/80">Liquidez / Costos</span>
+                    <span className="text-ink/60 font-bold">FRICCIÓN (f)</span>
+                    <span className="text-ink/80">Liquidez / Costos</span>
                   </div>
-                  <span className="text-[7px] text-white/30 leading-tight">Facilidad Entrada/Salida, Controles de Capital, Costos Operativos.</span>
+                  <span className="text-[7px] text-ink/30 leading-tight">Facilidad Entrada/Salida, Controles de Capital, Costos Operativos.</span>
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-white/5">
-                <span className="text-[8px] font-mono text-white/30 uppercase tracking-widest block">Rangos de Fuerza G</span>
+              <div className="space-y-2 pt-2 border-t border-ink/5">
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Rangos de Fuerza G</span>
                 <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
                   <div className="p-1 rounded bg-accent/10 border border-accent/20 text-center">
                     <div className="text-accent font-bold uppercase">Alta</div>
-                    <div className="text-white/40">&gt; 8.0</div>
+                    <div className="text-ink/40">&gt; 8.0</div>
                   </div>
-                  <div className="p-1 rounded bg-white/5 border border-white/10 text-center">
-                    <div className="text-white/80 font-bold uppercase">Media</div>
-                    <div className="text-white/40">2.0 - 8.0</div>
+                  <div className="p-1 rounded bg-ink/5 border border-ink/10 text-center">
+                    <div className="text-ink/80 font-bold uppercase">Media</div>
+                    <div className="text-ink/40">2.0 - 8.0</div>
                   </div>
                   <div className="p-1 rounded bg-danger/10 border border-danger/20 text-center">
                     <div className="text-danger font-bold uppercase">Baja</div>
-                    <div className="text-white/40">&lt; 2.0</div>
+                    <div className="text-ink/40">&lt; 2.0</div>
                   </div>
                 </div>
               </div>
@@ -300,13 +318,13 @@ export default function App() {
           </section>
 
           <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
-            <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+            <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
               <Info className="w-3 h-3" />
               Insight de Gravedad
             </h2>
             <div className="space-y-3">
-              <div className="p-3 rounded bg-black/40 border border-white/5">
-                <p className="text-[10px] font-mono text-white/60 leading-relaxed italic">
+              <div className="p-3 rounded bg-surface/60 border border-ink/5">
+                <p className="text-[10px] font-mono text-ink/60 leading-relaxed italic">
                   {activeScenario.id === 'live' 
                     ? "Análisis basado en noticias de último minuto y datos macro en tiempo real. El capital se mueve hacia la mayor atracción ajustada por riesgo."
                     : "El capital no va al mayor retorno absoluto; va al mejor retorno ajustado por riesgo y liquidez. El dinero se mueve hacia donde hay mayor atracción ajustada por riesgo."}
@@ -314,10 +332,10 @@ export default function App() {
               </div>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-[10px] font-mono">
-                  <span className="text-white/40">Volatilidad Global</span>
+                  <span className="text-ink/40">Volatilidad Global</span>
                   <span className="text-accent">14.2%</span>
                 </div>
-                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                <div className="w-full h-1 bg-ink/5 rounded-full overflow-hidden">
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: '42%' }}
@@ -335,6 +353,7 @@ export default function App() {
             <WorldMap
               scenario={activeScenario}
               geoPoints={GEO_POINTS}
+              theme={darkMode ? 'dark' : 'light'}
               onPointClick={handlePointClick}
               onCountrySelect={handleCountrySelect}
               onSectorClick={handleSectorClick}
@@ -360,50 +379,50 @@ export default function App() {
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
-                        <div className={cn('w-2 h-2 rounded-full', node.isGravityCenter ? 'bg-accent animate-pulse' : 'bg-white/20')} />
+                        <div className={cn('w-2 h-2 rounded-full', node.isGravityCenter ? 'bg-accent animate-pulse' : 'bg-ink/20')} />
                         <h3 className="text-sm font-bold uppercase tracking-tight">{sector.fullName}</h3>
                       </div>
-                      <button onClick={() => setSelectedSectorId(null)} className="p-1 hover:bg-white/10 rounded transition-colors">
-                        <X className="w-4 h-4 text-white/40" />
+                      <button onClick={() => setSelectedSectorId(null)} className="p-1 hover:bg-ink/10 rounded transition-colors">
+                        <X className="w-4 h-4 text-ink/40" />
                       </button>
                     </div>
                     <div className="space-y-4">
                       <div className="flex justify-between text-[10px] font-mono">
-                        <span className="text-white/40 uppercase">Estado</span>
-                        <span className={node.isGravityCenter ? 'text-accent' : 'text-white/40'}>
+                        <span className="text-ink/40 uppercase">Estado</span>
+                        <span className={node.isGravityCenter ? 'text-accent' : 'text-ink/40'}>
                           {node.isGravityCenter ? 'Centro Activo' : 'Sector Secundario'}
                         </span>
                       </div>
-                      <div className="pt-3 border-t border-white/5 space-y-3">
-                        <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-1">
+                      <div className="pt-3 border-t border-ink/5 space-y-3">
+                        <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
                           <Zap className="w-3 h-3" />Desglose de Gravedad
                         </h4>
                         <div className="space-y-2">
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">MASA (Atractivo)</span>
+                              <span className="text-ink/60">MASA (Atractivo)</span>
                               <span className="text-accent">{node.masa}%</span>
                             </div>
-                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
                               <motion.div initial={{ width: 0 }} animate={{ width: `${node.masa}%` }} className="h-full bg-accent" />
                             </div>
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">DISTANCIA (Riesgo)</span>
+                              <span className="text-ink/60">DISTANCIA (Riesgo)</span>
                               <span className="text-danger">{node.distancia}%</span>
                             </div>
-                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
                               <motion.div initial={{ width: 0 }} animate={{ width: `${node.distancia}%` }} className="h-full bg-danger/60" />
                             </div>
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">FRICCIÓN (Liquidez)</span>
-                              <span className="text-white/40">10%</span>
+                              <span className="text-ink/60">FRICCIÓN (Liquidez)</span>
+                              <span className="text-ink/40">10%</span>
                             </div>
-                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                              <div className="h-full bg-white/20 w-[10%]" />
+                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
+                              <div className="h-full bg-ink/20 w-[10%]" />
                             </div>
                           </div>
                         </div>
@@ -413,27 +432,27 @@ export default function App() {
                           </p>
                         </div>
                       </div>
-                      <div className="pt-3 border-t border-white/5 space-y-3">
+                      <div className="pt-3 border-t border-ink/5 space-y-3">
                         <div>
-                          <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest mb-2 flex items-center gap-1">
+                          <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest mb-2 flex items-center gap-1">
                             <ArrowUpRight className="w-3 h-3" />Salida de Capital
                           </h4>
                           <div className="space-y-1.5">
                             {outFlows.length > 0 ? outFlows.map((flow, i) => {
                               const dest = SECTORS.find(s => s.id === flow.to);
                               return (
-                                <div key={i} className="p-2 rounded bg-white/5 border border-white/5">
+                                <div key={i} className="p-2 rounded bg-ink/5 border border-ink/5">
                                   <div className="flex justify-between">
-                                    <span className="text-[9px] font-mono text-white/70">Hacia {dest?.fullName ?? flow.to}</span>
+                                    <span className="text-[9px] font-mono text-ink/70">Hacia {dest?.fullName ?? flow.to}</span>
                                     <span className="text-[9px] font-mono text-accent">{(flow.strength * 100).toFixed(0)}%</span>
                                   </div>
                                 </div>
                               );
-                            }) : <p className="text-[9px] font-mono text-white/20 italic">Sin salidas significativas</p>}
+                            }) : <p className="text-[9px] font-mono text-ink/20 italic">Sin salidas significativas</p>}
                           </div>
                         </div>
                         <div>
-                          <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest mb-2 flex items-center gap-1">
+                          <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest mb-2 flex items-center gap-1">
                             <ArrowDownLeft className="w-3 h-3" />Entrada de Capital
                           </h4>
                           <div className="space-y-1.5">
@@ -447,7 +466,7 @@ export default function App() {
                                   </div>
                                 </div>
                               );
-                            }) : <p className="text-[9px] font-mono text-white/20 italic">Sin entradas significativas</p>}
+                            }) : <p className="text-[9px] font-mono text-ink/20 italic">Sin entradas significativas</p>}
                           </div>
                         </div>
                       </div>
@@ -470,29 +489,29 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <div className={cn(
                         "w-2 h-2 rounded-full",
-                        activeScenario.gravityCenters.includes(selectedPoint.id) ? "bg-accent animate-pulse" : "bg-white/20"
+                        activeScenario.gravityCenters.includes(selectedPoint.id) ? "bg-accent animate-pulse" : "bg-ink/20"
                       )} />
                       <h3 className="text-sm font-bold uppercase tracking-tight">{selectedPoint.name}</h3>
                     </div>
                     <button 
                       onClick={() => setSelectedPoint(null)}
-                      className="p-1 hover:bg-white/10 rounded transition-colors"
+                      className="p-1 hover:bg-ink/10 rounded transition-colors"
                     >
-                      <X className="w-4 h-4 text-white/40" />
+                      <X className="w-4 h-4 text-ink/40" />
                     </button>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between text-[10px] font-mono">
-                      <span className="text-white/40 uppercase">Clasificación</span>
-                      <span className="text-white/80 uppercase">{selectedPoint.type === 'country' ? 'País' : 'Activo'}</span>
+                      <span className="text-ink/40 uppercase">Clasificación</span>
+                      <span className="text-ink/80 uppercase">{selectedPoint.type === 'country' ? 'País' : 'Activo'}</span>
                     </div>
                     
                     <div className="flex items-center justify-between text-[10px] font-mono">
-                      <span className="text-white/40 uppercase">Estado de Gravedad</span>
+                      <span className="text-ink/40 uppercase">Estado de Gravedad</span>
                       <span className={cn(
                         "uppercase",
-                        activeScenario.gravityCenters.includes(selectedPoint.id) ? "text-accent" : "text-white/40"
+                        activeScenario.gravityCenters.includes(selectedPoint.id) ? "text-accent" : "text-ink/40"
                       )}>
                         {activeScenario.gravityCenters.includes(selectedPoint.id) ? 'Centro Activo' : 'Mercado Secundario'}
                       </span>
@@ -500,18 +519,18 @@ export default function App() {
 
                     {/* Gravity Formula Breakdown */}
                     {activeScenario.metrics?.[selectedPoint.id] && (
-                      <div className="pt-4 border-t border-white/5 space-y-3">
-                        <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-1">
+                      <div className="pt-4 border-t border-ink/5 space-y-3">
+                        <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
                           <Zap className="w-3 h-3" />
                           Desglose de Gravedad
                         </h4>
                         <div className="grid grid-cols-1 gap-3">
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">MASA (Atractivo)</span>
+                              <span className="text-ink/60">MASA (Atractivo)</span>
                               <span className="text-accent">{activeScenario.metrics[selectedPoint.id].masa}%</span>
                             </div>
-                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${activeScenario.metrics[selectedPoint.id].masa}%` }}
@@ -519,17 +538,17 @@ export default function App() {
                               />
                             </div>
                             {activeScenario.metrics[selectedPoint.id].masaJustificacion && (
-                              <p className="text-[8px] font-mono text-white/30 leading-tight italic">
+                              <p className="text-[8px] font-mono text-ink/30 leading-tight italic">
                                 {activeScenario.metrics[selectedPoint.id].masaJustificacion}
                               </p>
                             )}
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">DISTANCIA (Riesgo)</span>
+                              <span className="text-ink/60">DISTANCIA (Riesgo)</span>
                               <span className="text-danger">{activeScenario.metrics[selectedPoint.id].distancia}%</span>
                             </div>
-                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${activeScenario.metrics[selectedPoint.id].distancia}%` }}
@@ -537,25 +556,25 @@ export default function App() {
                               />
                             </div>
                             {activeScenario.metrics[selectedPoint.id].distanciaJustificacion && (
-                              <p className="text-[8px] font-mono text-white/30 leading-tight italic">
+                              <p className="text-[8px] font-mono text-ink/30 leading-tight italic">
                                 {activeScenario.metrics[selectedPoint.id].distanciaJustificacion}
                               </p>
                             )}
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">FRICCIÓN (Liquidez)</span>
-                              <span className="text-white/40">{activeScenario.metrics[selectedPoint.id].friccion}%</span>
+                              <span className="text-ink/60">FRICCIÓN (Liquidez)</span>
+                              <span className="text-ink/40">{activeScenario.metrics[selectedPoint.id].friccion}%</span>
                             </div>
-                            <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${activeScenario.metrics[selectedPoint.id].friccion}%` }}
-                                className="h-full bg-white/20"
+                                className="h-full bg-ink/20"
                               />
                             </div>
                             {activeScenario.metrics[selectedPoint.id].friccionJustificacion && (
-                              <p className="text-[8px] font-mono text-white/30 leading-tight italic">
+                              <p className="text-[8px] font-mono text-ink/30 leading-tight italic">
                                 {activeScenario.metrics[selectedPoint.id].friccionJustificacion}
                               </p>
                             )}
@@ -569,10 +588,10 @@ export default function App() {
                       </div>
                     )}
 
-                    <div className="pt-4 border-t border-white/5 space-y-4">
+                    <div className="pt-4 border-t border-ink/5 space-y-4">
                       {/* Outgoing Flows */}
                       <div>
-                        <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest mb-2 flex items-center gap-1">
                           <ArrowUpRight className="w-3 h-3" />
                           Salida de Capital
                         </h4>
@@ -582,9 +601,9 @@ export default function App() {
                               const fromMetrics = activeScenario.metrics?.[flow.from];
                               const toMetrics = activeScenario.metrics?.[flow.to];
                               return (
-                                <div key={i} className="p-2 rounded bg-white/5 border border-white/5">
+                                <div key={i} className="p-2 rounded bg-ink/5 border border-ink/5">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-bold text-white/80">Hacia {flow.to}</span>
+                                    <span className="text-[10px] font-bold text-ink/80">Hacia {flow.to}</span>
                                     <span className="text-[9px] font-mono text-accent">{(flow.strength * 100).toFixed(0)}%</span>
                                   </div>
                                   {fromMetrics && toMetrics && (
@@ -592,19 +611,19 @@ export default function App() {
                                       ({fromMetrics.masa} · {toMetrics.masa}) / {toMetrics.distancia}²
                                     </p>
                                   )}
-                                  <p className="text-[9px] font-mono text-white/40 leading-tight">{flow.label}</p>
+                                  <p className="text-[9px] font-mono text-ink/40 leading-tight">{flow.label}</p>
                                 </div>
                               );
                             })
                           ) : (
-                            <p className="text-[9px] font-mono text-white/20 italic">Sin salidas significativas</p>
+                            <p className="text-[9px] font-mono text-ink/20 italic">Sin salidas significativas</p>
                           )}
                         </div>
                       </div>
 
                       {/* Incoming Flows */}
                       <div>
-                        <h4 className="text-[9px] font-mono text-white/40 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest mb-2 flex items-center gap-1">
                           <ArrowDownLeft className="w-3 h-3" />
                           Entrada de Capital
                         </h4>
@@ -624,12 +643,12 @@ export default function App() {
                                       ({fromMetrics.masa} · {toMetrics.masa}) / {toMetrics.distancia}²
                                     </p>
                                   )}
-                                  <p className="text-[9px] font-mono text-white/40 leading-tight">{flow.label}</p>
+                                  <p className="text-[9px] font-mono text-ink/40 leading-tight">{flow.label}</p>
                                 </div>
                               );
                             })
                           ) : (
-                            <p className="text-[9px] font-mono text-white/20 italic">Sin entradas significativas</p>
+                            <p className="text-[9px] font-mono text-ink/20 italic">Sin entradas significativas</p>
                           )}
                         </div>
                       </div>
@@ -660,7 +679,7 @@ export default function App() {
                     className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/5 to-transparent"
                   />
                 )}
-                <span className="text-[8px] font-mono text-white/40 uppercase tracking-widest block mb-1">{item.label}</span>
+                <span className="text-[8px] font-mono text-ink/40 uppercase tracking-widest block mb-1">{item.label}</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-bold tracking-tighter">{item.data.value}</span>
                   <div className="flex items-center gap-1">
@@ -671,7 +690,7 @@ export default function App() {
                     ) : null}
                     <span className={cn(
                       "text-[9px] font-mono",
-                      item.data.trend === 'up' ? "text-accent" : item.data.trend === 'down' ? "text-danger" : "text-white/40"
+                      item.data.trend === 'up' ? "text-accent" : item.data.trend === 'down' ? "text-danger" : "text-ink/40"
                     )}>
                       {item.data.change}
                     </span>
@@ -687,7 +706,7 @@ export default function App() {
           <section className="space-y-4">
             {selectedCountry ? (
               <>
-                <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+                <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
                   <BarChart3 className="w-3 h-3" />
                   Sectores · {selectedCountry}
                 </h2>
@@ -702,7 +721,7 @@ export default function App() {
                       let statusLabel = 'BAJA';
                       let valueColor = 'text-danger';
                       if (fuerza > 8) { statusLabel = 'ALTA'; valueColor = 'text-accent'; }
-                      else if (fuerza >= 2) { statusLabel = 'MEDIA'; valueColor = 'text-white/60'; }
+                      else if (fuerza >= 2) { statusLabel = 'MEDIA'; valueColor = 'text-ink/60'; }
                       return (
                         <button
                           key={sector.id}
@@ -714,15 +733,15 @@ export default function App() {
                           )}
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] font-mono text-white/70 uppercase">{sector.fullName}</span>
+                            <span className="text-[9px] font-mono text-ink/70 uppercase">{sector.fullName}</span>
                             {node.isGravityCenter && <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
                           </div>
                           <div className="flex items-center justify-between text-[9px] font-mono">
-                            <span className="text-white/30">Fuerza G · {statusLabel}</span>
+                            <span className="text-ink/30">Fuerza G · {statusLabel}</span>
                             <span className={valueColor}>{fuerza.toFixed(2)}</span>
                           </div>
-                          <div className="mt-1.5 h-0.5 bg-white/5 rounded-full overflow-hidden">
-                            <div className={cn('h-full rounded-full', node.isGravityCenter ? 'bg-accent' : 'bg-white/20')}
+                          <div className="mt-1.5 h-0.5 bg-ink/5 rounded-full overflow-hidden">
+                            <div className={cn('h-full rounded-full', node.isGravityCenter ? 'bg-accent' : 'bg-ink/20')}
                               style={{ width: `${Math.min(100, Math.max(0, (fuerza / 10) * 100))}%` }} />
                           </div>
                         </button>
@@ -733,7 +752,7 @@ export default function App() {
               </>
             ) : (
               <>
-            <h2 className="text-[11px] font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+            <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
               <TrendingUp className="w-3 h-3" />
               Centros de Gravedad de Activos
             </h2>
@@ -755,7 +774,7 @@ export default function App() {
                   barWidth = '90%';
                 } else if (force >= 2.0) {
                   statusLabel = 'MEDIA';
-                  barColor = 'bg-white/40';
+                  barColor = 'bg-ink/40';
                   barWidth = '50%';
                 } else {
                   statusLabel = 'BAJA';
@@ -776,12 +795,12 @@ export default function App() {
                     <div className="flex items-center justify-between mb-3">
                       <span className={cn(
                         "text-xs font-bold uppercase",
-                        isSelected ? "text-accent" : "text-white/80"
+                        isSelected ? "text-accent" : "text-ink/80"
                       )}>{asset.name}</span>
                       {isActive && <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />}
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                      <div className="flex-1 h-1 bg-ink/5 rounded-full overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: barWidth }}
@@ -790,7 +809,7 @@ export default function App() {
                       </div>
                       <span className={cn(
                         "text-[10px] font-mono",
-                        statusLabel === 'ALTA' ? "text-accent" : statusLabel === 'MEDIA' ? "text-white/60" : "text-danger"
+                        statusLabel === 'ALTA' ? "text-accent" : statusLabel === 'MEDIA' ? "text-ink/60" : "text-danger"
                       )}>
                         {statusLabel}
                       </span>
@@ -799,38 +818,38 @@ export default function App() {
                       <motion.div 
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
-                        className="mt-3 pt-3 border-t border-white/5 space-y-3"
+                        className="mt-3 pt-3 border-t border-ink/5 space-y-3"
                       >
                         <div className="grid grid-cols-1 gap-2">
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">MASA</span>
+                              <span className="text-ink/60">MASA</span>
                               <span className="text-accent">{activeScenario.metrics[asset.id].masa}%</span>
                             </div>
                             {activeScenario.metrics[asset.id].masaJustificacion && (
-                              <p className="text-[7px] font-mono text-white/30 leading-tight italic">
+                              <p className="text-[7px] font-mono text-ink/30 leading-tight italic">
                                 {activeScenario.metrics[asset.id].masaJustificacion}
                               </p>
                             )}
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">DISTANCIA</span>
+                              <span className="text-ink/60">DISTANCIA</span>
                               <span className="text-danger">{activeScenario.metrics[asset.id].distancia}%</span>
                             </div>
                             {activeScenario.metrics[asset.id].distanciaJustificacion && (
-                              <p className="text-[7px] font-mono text-white/30 leading-tight italic">
+                              <p className="text-[7px] font-mono text-ink/30 leading-tight italic">
                                 {activeScenario.metrics[asset.id].distanciaJustificacion}
                               </p>
                             )}
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-white/60">FRICCIÓN</span>
-                              <span className="text-white/60">{activeScenario.metrics[asset.id].friccion}%</span>
+                              <span className="text-ink/60">FRICCIÓN</span>
+                              <span className="text-ink/60">{activeScenario.metrics[asset.id].friccion}%</span>
                             </div>
                             {activeScenario.metrics[asset.id].friccionJustificacion && (
-                              <p className="text-[7px] font-mono text-white/30 leading-tight italic">
+                              <p className="text-[7px] font-mono text-ink/30 leading-tight italic">
                                 {activeScenario.metrics[asset.id].friccionJustificacion}
                               </p>
                             )}
@@ -839,12 +858,12 @@ export default function App() {
                         
                         <div className="p-2 rounded bg-accent/10 border border-accent/20">
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-[8px] font-mono text-white/40 uppercase">Fuerza G</span>
+                            <span className="text-[8px] font-mono text-ink/40 uppercase">Fuerza G</span>
                             <span className="text-[10px] font-mono text-accent font-bold">
                               {((activeScenario.metrics[asset.id].masa - activeScenario.metrics[asset.id].distancia) / Math.max(1, activeScenario.metrics[asset.id].friccion)).toFixed(2)}
                             </span>
                           </div>
-                          <p className="text-[7px] font-mono text-white/30 leading-tight">
+                          <p className="text-[7px] font-mono text-ink/30 leading-tight">
                             ({activeScenario.metrics[asset.id].masa} - {activeScenario.metrics[asset.id].distancia}) / {activeScenario.metrics[asset.id].friccion}
                           </p>
                         </div>
@@ -871,7 +890,7 @@ export default function App() {
             <h3 className="text-sm font-bold uppercase mb-2">
               {activeScenario.id === 'live' ? 'Justificación del Modelo' : 'Sentimiento del Mercado'}
             </h3>
-            <p className="text-[10px] font-mono text-white/60 leading-relaxed mb-4">
+            <p className="text-[10px] font-mono text-ink/60 leading-relaxed mb-4">
               {activeScenario.id === 'live' 
                 ? activeScenario.description 
                 : `La atracción gravitacional actual se está desplazando hacia ${activeScenario.gravityCenters.join(' y ')} debido a condiciones de ${activeScenario.name.toLowerCase()}.`}
@@ -886,15 +905,15 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-border p-6 mt-12 glass">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4 text-[10px] font-mono text-white/40 uppercase tracking-widest">
+          <div className="flex items-center gap-4 text-[10px] font-mono text-ink/40 uppercase tracking-widest">
             <span>© 2026 MOTOR DE GRAVEDAD DE CAPITAL</span>
             <span className="hidden md:inline">|</span>
             <span>ESTADO DEL SISTEMA: OPERATIVO</span>
           </div>
           <div className="flex items-center gap-6">
-            <a href="#" className="text-[10px] font-mono text-white/40 hover:text-accent uppercase tracking-widest transition-colors">Documentación</a>
-            <a href="#" className="text-[10px] font-mono text-white/40 hover:text-accent uppercase tracking-widest transition-colors">Acceso API</a>
-            <a href="#" className="text-[10px] font-mono text-white/40 hover:text-accent uppercase tracking-widest transition-colors">Política de Privacidad</a>
+            <a href="#" className="text-[10px] font-mono text-ink/40 hover:text-accent uppercase tracking-widest transition-colors">Documentación</a>
+            <a href="#" className="text-[10px] font-mono text-ink/40 hover:text-accent uppercase tracking-widest transition-colors">Acceso API</a>
+            <a href="#" className="text-[10px] font-mono text-ink/40 hover:text-accent uppercase tracking-widest transition-colors">Política de Privacidad</a>
           </div>
         </div>
       </footer>

@@ -12,6 +12,15 @@
   --color-border: #333333;
 }
 
+html.light {
+  --color-bg: #f0f4f8;
+  --color-ink: #0f172a;
+  --color-accent: #00aa55;
+  --color-danger: #dc2626;
+  --color-surface: #ffffff;
+  --color-border: #cbd5e1;
+}
+
 @layer base {
   body {
     @apply bg-bg text-ink font-sans antialiased;
@@ -22,8 +31,16 @@
   @apply bg-surface/80 backdrop-blur-md border border-border;
 }
 
+html.light .glass {
+  @apply bg-white/90 backdrop-blur-md border border-border shadow-sm;
+}
+
 .glow-accent {
   box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+}
+
+html.light .glow-accent {
+  box-shadow: 0 0 15px rgba(0, 170, 85, 0.15);
 }
 
 @keyframes flow {
