@@ -518,75 +518,151 @@ export default function App() {
                     </div>
 
                     {/* Gravity Formula Breakdown */}
-                    {activeScenario.metrics?.[selectedPoint.id] && (
-                      <div className="pt-4 border-t border-ink/5 space-y-3">
-                        <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
-                          <Zap className="w-3 h-3" />
-                          Desglose de Gravedad
-                        </h4>
-                        <div className="grid grid-cols-1 gap-3">
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-ink/60">MASA (Atractivo)</span>
-                              <span className="text-accent">{activeScenario.metrics[selectedPoint.id].masa}%</span>
+                    {activeScenario.metrics?.[selectedPoint.id] && (() => {
+                      const m = activeScenario.metrics![selectedPoint.id];
+                      const mc = m.masaComponents;
+                      const mw = m.masaWeights;
+                      const dc = m.distanciaComponents;
+                      const fc = m.friccionComponents;
+                      const fuerza = m.fuerzaG ?? (m.masa - m.distancia) / Math.max(1, m.friccion);
+                      return (
+                        <div className="pt-4 border-t border-ink/5 space-y-3">
+                          <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
+                            <Zap className="w-3 h-3" />Desglose de Gravedad
+                          </h4>
+                          <div className="grid grid-cols-1 gap-3">
+                            {/* MASA */}
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-[9px] font-mono">
+                                <span className="text-ink/60">MASA (Atractivo)</span>
+                                <span className="text-accent">{m.masa.toFixed(1)}</span>
+                              </div>
+                              {mc && mw ? (
+                                <>
+                                  <p className="text-[7px] font-mono text-ink/30 italic leading-none">
+                                    M = {mw.w1}×Ret + {mw.w2}×Crec + {mw.w3}×Liq + {mw.w4}×Conf
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-1">
+                                    {([
+                                      { label: `Retorno (${mw.w1})`, val: mc.retorno, color: 'bg-accent' },
+                                      { label: `Crecim. (${mw.w2})`, val: mc.crecimiento, color: 'bg-accent/70' },
+                                      { label: `Liquidez (${mw.w3})`, val: mc.liquidezActivo, color: 'bg-accent/50' },
+                                      { label: `Confianza (${mw.w4})`, val: mc.confianza, color: 'bg-accent/30' },
+                                    ] as const).map(item => (
+                                      <div key={item.label} className="space-y-0.5">
+                                        <div className="flex justify-between text-[7px] font-mono">
+                                          <span className="text-ink/40">{item.label}</span>
+                                          <span className="text-ink/60">{item.val}</span>
+                                        </div>
+                                        <div className="h-0.5 bg-ink/5 rounded-full overflow-hidden">
+                                          <div className={`h-full ${item.color}`} style={{ width: `${item.val}%` }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {m.masaJustificacion && <p className="text-[7px] font-mono text-ink/30 leading-tight italic">{m.masaJustificacion}</p>}
+                                </>
+                              ) : (
+                                <>
+                                  <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
+                                    <motion.div initial={{ width: 0 }} animate={{ width: `${m.masa}%` }} className="h-full bg-accent" />
+                                  </div>
+                                  {m.masaJustificacion && <p className="text-[8px] font-mono text-ink/30 leading-tight italic">{m.masaJustificacion}</p>}
+                                </>
+                              )}
                             </div>
-                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${activeScenario.metrics[selectedPoint.id].masa}%` }}
-                                className="h-full bg-accent"
-                              />
+                            {/* DISTANCIA */}
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-[9px] font-mono">
+                                <span className="text-ink/60">DISTANCIA (Riesgo)</span>
+                                <span className="text-danger">{m.distancia.toFixed(1)}</span>
+                              </div>
+                              {dc ? (
+                                <>
+                                  <p className="text-[7px] font-mono text-ink/30 italic leading-none">
+                                    r = Vol({dc.volatilidad}) + Spread({dc.spread}) + (1-ρ={dc.correlacion.toFixed(2)})
+                                  </p>
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {([
+                                      { label: 'Volatil.', val: dc.volatilidad, color: 'bg-danger/80' },
+                                      { label: 'Spread', val: dc.spread, color: 'bg-danger/60' },
+                                      { label: '1-Corr', val: Math.round((1 - dc.correlacion) * 100), color: 'bg-danger/40' },
+                                    ] as const).map(item => (
+                                      <div key={item.label} className="space-y-0.5">
+                                        <div className="flex justify-between text-[7px] font-mono">
+                                          <span className="text-ink/40">{item.label}</span>
+                                          <span className="text-ink/60">{item.val}</span>
+                                        </div>
+                                        <div className="h-0.5 bg-ink/5 rounded-full overflow-hidden">
+                                          <div className={`h-full ${item.color}`} style={{ width: `${item.val}%` }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {m.distanciaJustificacion && <p className="text-[7px] font-mono text-ink/30 leading-tight italic">{m.distanciaJustificacion}</p>}
+                                </>
+                              ) : (
+                                <>
+                                  <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
+                                    <motion.div initial={{ width: 0 }} animate={{ width: `${m.distancia}%` }} className="h-full bg-danger/60" />
+                                  </div>
+                                  {m.distanciaJustificacion && <p className="text-[8px] font-mono text-ink/30 leading-tight italic">{m.distanciaJustificacion}</p>}
+                                </>
+                              )}
                             </div>
-                            {activeScenario.metrics[selectedPoint.id].masaJustificacion && (
-                              <p className="text-[8px] font-mono text-ink/30 leading-tight italic">
-                                {activeScenario.metrics[selectedPoint.id].masaJustificacion}
+                            {/* FRICCIÓN */}
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-[9px] font-mono">
+                                <span className="text-ink/60">FRICCIÓN (Liquidez)</span>
+                                <span className="text-ink/40">{m.friccion}</span>
+                              </div>
+                              {fc ? (
+                                <div className="grid grid-cols-3 gap-1">
+                                  {([
+                                    { label: 'Bid-Ask', val: fc.bidAskSpread, color: 'bg-ink/30' },
+                                    { label: 'Restric.', val: fc.restricciones, color: 'bg-ink/20' },
+                                    { label: 'Profund.', val: fc.profundidad, color: 'bg-accent/20' },
+                                  ] as const).map(item => (
+                                    <div key={item.label} className="space-y-0.5">
+                                      <div className="flex justify-between text-[7px] font-mono">
+                                        <span className="text-ink/40">{item.label}</span>
+                                        <span className="text-ink/60">{item.val}</span>
+                                      </div>
+                                      <div className="h-0.5 bg-ink/5 rounded-full overflow-hidden">
+                                        <div className={`h-full ${item.color}`} style={{ width: `${item.val}%` }} />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
+                                    <motion.div initial={{ width: 0 }} animate={{ width: `${m.friccion}%` }} className="h-full bg-ink/20" />
+                                  </div>
+                                  {m.friccionJustificacion && <p className="text-[8px] font-mono text-ink/30 leading-tight italic">{m.friccionJustificacion}</p>}
+                                </>
+                              )}
+                              {fc && m.friccionJustificacion && <p className="text-[7px] font-mono text-ink/30 leading-tight italic">{m.friccionJustificacion}</p>}
+                            </div>
+                          </div>
+                          <div className="p-2 rounded bg-accent/5 border border-accent/10 space-y-0.5 text-center">
+                            <p className="text-[9px] font-mono text-accent">
+                              ({m.masa.toFixed(1)} - {m.distancia.toFixed(1)}) / {m.friccion} = {fuerza.toFixed(2)}
+                            </p>
+                            {m.zscoreFlows !== undefined && (
+                              <p className="text-[7px] font-mono text-ink/30">
+                                Z-score flujos: {m.zscoreFlows > 0 ? '+' : ''}{m.zscoreFlows.toFixed(2)}
                               </p>
                             )}
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-ink/60">DISTANCIA (Riesgo)</span>
-                              <span className="text-danger">{activeScenario.metrics[selectedPoint.id].distancia}%</span>
-                            </div>
-                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${activeScenario.metrics[selectedPoint.id].distancia}%` }}
-                                className="h-full bg-danger/60"
-                              />
-                            </div>
-                            {activeScenario.metrics[selectedPoint.id].distanciaJustificacion && (
-                              <p className="text-[8px] font-mono text-ink/30 leading-tight italic">
-                                {activeScenario.metrics[selectedPoint.id].distanciaJustificacion}
-                              </p>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[9px] font-mono">
-                              <span className="text-ink/60">FRICCIÓN (Liquidez)</span>
-                              <span className="text-ink/40">{activeScenario.metrics[selectedPoint.id].friccion}%</span>
-                            </div>
-                            <div className="h-1 bg-ink/5 rounded-full overflow-hidden">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${activeScenario.metrics[selectedPoint.id].friccion}%` }}
-                                className="h-full bg-ink/20"
-                              />
-                            </div>
-                            {activeScenario.metrics[selectedPoint.id].friccionJustificacion && (
-                              <p className="text-[8px] font-mono text-ink/30 leading-tight italic">
-                                {activeScenario.metrics[selectedPoint.id].friccionJustificacion}
+                            {activeScenario.macroRegime && (
+                              <p className="text-[7px] font-mono text-accent/50 uppercase tracking-widest">
+                                Régimen: {activeScenario.macroRegime}
                               </p>
                             )}
                           </div>
                         </div>
-                        <div className="p-2 rounded bg-accent/5 border border-accent/10 text-center">
-                          <p className="text-[9px] font-mono text-accent">
-                            ({activeScenario.metrics[selectedPoint.id].masa} - {activeScenario.metrics[selectedPoint.id].distancia}) / {activeScenario.metrics[selectedPoint.id].friccion} = {((activeScenario.metrics[selectedPoint.id].masa - activeScenario.metrics[selectedPoint.id].distancia) / Math.max(1, activeScenario.metrics[selectedPoint.id].friccion)).toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     <div className="pt-4 border-t border-ink/5 space-y-4">
                       {/* Outgoing Flows */}
@@ -606,11 +682,22 @@ export default function App() {
                                     <span className="text-[10px] font-bold text-ink/80">Hacia {flow.to}</span>
                                     <span className="text-[9px] font-mono text-accent">{(flow.strength * 100).toFixed(0)}%</span>
                                   </div>
-                                  {fromMetrics && toMetrics && (
+                                  {flow.flowTheoretical !== undefined ? (
+                                    <div className="space-y-0.5 mb-1">
+                                      <p className="text-[7px] font-mono text-accent/60">
+                                        ({fromMetrics?.masa.toFixed(0) ?? '?'} × {toMetrics?.masa.toFixed(0) ?? '?'}) / {toMetrics?.distancia.toFixed(0) ?? '?'}² × 1/{toMetrics?.friccion.toFixed(0) ?? '?'} = {flow.flowTheoretical.toFixed(3)}
+                                      </p>
+                                      {flow.zscoreAdjustment !== undefined && (
+                                        <p className="text-[7px] font-mono text-ink/30">
+                                          Z-adj: {flow.zscoreAdjustment > 0 ? '+' : ''}{flow.zscoreAdjustment.toFixed(2)} → Final: {flow.flowFinal?.toFixed(3) ?? '?'}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : fromMetrics && toMetrics ? (
                                     <p className="text-[7px] font-mono text-accent/60 mb-1">
                                       ({fromMetrics.masa} · {toMetrics.masa}) / {toMetrics.distancia}²
                                     </p>
-                                  )}
+                                  ) : null}
                                   <p className="text-[9px] font-mono text-ink/40 leading-tight">{flow.label}</p>
                                 </div>
                               );
@@ -638,11 +725,22 @@ export default function App() {
                                     <span className="text-[10px] font-bold text-accent">Desde {flow.from}</span>
                                     <span className="text-[9px] font-mono text-accent">{(flow.strength * 100).toFixed(0)}%</span>
                                   </div>
-                                  {fromMetrics && toMetrics && (
+                                  {flow.flowTheoretical !== undefined ? (
+                                    <div className="space-y-0.5 mb-1">
+                                      <p className="text-[7px] font-mono text-accent/60">
+                                        ({fromMetrics?.masa.toFixed(0) ?? '?'} × {toMetrics?.masa.toFixed(0) ?? '?'}) / {toMetrics?.distancia.toFixed(0) ?? '?'}² × 1/{toMetrics?.friccion.toFixed(0) ?? '?'} = {flow.flowTheoretical.toFixed(3)}
+                                      </p>
+                                      {flow.zscoreAdjustment !== undefined && (
+                                        <p className="text-[7px] font-mono text-ink/30">
+                                          Z-adj: {flow.zscoreAdjustment > 0 ? '+' : ''}{flow.zscoreAdjustment.toFixed(2)} → Final: {flow.flowFinal?.toFixed(3) ?? '?'}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : fromMetrics && toMetrics ? (
                                     <p className="text-[7px] font-mono text-accent/60 mb-1">
                                       ({fromMetrics.masa} · {toMetrics.masa}) / {toMetrics.distancia}²
                                     </p>
-                                  )}
+                                  ) : null}
                                   <p className="text-[9px] font-mono text-ink/40 leading-tight">{flow.label}</p>
                                 </div>
                               );

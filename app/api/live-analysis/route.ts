@@ -21,7 +21,7 @@ export async function GET() {
   try {
     const response = await Promise.race([
       ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash-preview-05-20',
         contents: buildPrompt(currentDate),
         config: {
           tools: [{ googleSearch: {} }],
@@ -49,108 +49,208 @@ export async function GET() {
 
 function buildPrompt(currentDate: string): string {
   return `
-    Analiza la realidad financiera global ACTUAL a fecha de ${currentDate} utilizando el modelo de "GRAVEDAD FINANCIERA".
+Eres un modelo cuantitativo de flujos de capital global. Fecha de análisis: ${currentDate}.
 
-    IMPORTANTE: Debes utilizar la herramienta de búsqueda (googleSearch) para obtener NOTICIAS DE ÚLTIMO MINUTO y datos macroeconómicos actualizados al día de hoy. Tu análisis debe reflejar la realidad de mercado más reciente y realista posible.
+PASO 1 — BÚSQUEDA OBLIGATORIA (usa googleSearch):
+Busca los siguientes datos de mercado en tiempo real:
+- DXY (índice dólar) nivel actual y tendencia semanal
+- VIX (volatilidad S&P500) nivel actual
+- MOVE Index (volatilidad bonos del Tesoro)
+- US10Y yield actual y pendiente de la curva (10Y-2Y spread)
+- IG credit spread y HY credit spread (Bloomberg o ICE BofA)
+- ETF flows de la última semana: SPY, QQQ, GLD, TLT, EEM (flujos netos en millones USD)
+- Postura actual de la Fed (hawkish/neutral/dovish)
+- PMI manufacturero global más reciente
+- CDS spreads soberanos de Europa y Mercados Emergentes
+- Precio del oro spot y variación semanal
+- Precio del petróleo WTI y variación semanal
 
-    LÓGICA DEL MODELO (ESTRICTO):
-    Debes aplicar la Ley de Gravedad Financiera:
-    1. Versión Teórica (INTENSIDAD DE FLUJO): El 'strength' de cada flujo debe estimarse mediante:
-       Intensidad ∝ (Masa_origen · Masa_destino) / (Distancia_destino)²
-       *Nota: Normaliza el resultado para que 'strength' esté entre 0 y 1.*
-    2. Versión Práctica (FUERZA G INDIVIDUAL): Fuerza G = (Masa - Distancia) / Fricción
+PASO 2 — IDENTIFICAR RÉGIMEN MACRO:
+Basándote en los datos buscados, clasifica el régimen actual:
+- "risk-on": VIX < 18, yield curve positiva, flujos ETF equity positivos, spreads HY estables
+- "risk-off": VIX 18-28, yield curve plana/invertida, flujos hacia TLT/GLD, spreads ampliándose
+- "crisis": VIX > 28, spreads HY > 500bps, flujos masivos a refugios (USD, bonos, oro)
+- "neutral": señales mixtas, VIX 15-20, sin tendencia clara
 
-    DEFINICIONES DETALLADAS PARA TU ANÁLISIS:
-    - MASA (ATRACTIVO): Es la fuerza de succión de capital. Depende de:
-        * Rentabilidad esperada (Yield, dividendos, crecimiento de capital).
-        * Seguridad relativa (Tasas de interés de bonos soberanos).
-        * Estabilidad institucional (Earnings yield, estado de derecho).
-        * Confianza macroeconómica y crecimiento del PIB esperado.
-    - DISTANCIA (RIESGO/ESPACIO): Es la resistencia al flujo. Equivale a:
-        * Volatilidad del activo (VIX, desviaciones estándar).
-        * Riesgo País y Riesgo Político (Inestabilidad gubernamental).
-        * Incertidumbre Macro (Guerra, inflación descontrolada, giros en política monetaria).
-        * Riesgo Geopolítico y costos de transacción implícitos por riesgo.
-    - FRICCIÓN (LIQUIDEZ): Es la viscosidad del mercado. Se enfoca en:
-        * Liquidez (Facilidad de entrada/salida, profundidad del libro de órdenes).
-        * Controles de capital (Restricciones de salida de divisas).
-        * Costos operativos y regulatorios (Impuestos, burocracia financiera).
+Según el régimen, usa estos pesos dinámicos para calcular Masa:
+- risk-on:  w1=0.40 (retorno), w2=0.35 (crecimiento), w3=0.15 (liquidez), w4=0.10 (confianza)
+- risk-off: w1=0.15, w2=0.10, w3=0.35, w4=0.40
+- crisis:   w1=0.05, w2=0.05, w3=0.45, w4=0.45
+- neutral:  w1=0.25, w2=0.25, w3=0.25, w4=0.25
 
-    TU OBJETIVO: Identificar los 'gravityCenters' y 'flows' de capital basados en esta física financiera.
+PASO 3 — CALCULAR MÉTRICAS POR ACTIVO (escala 0-100):
+Para cada uno de los 8 activos (USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil):
 
-    REQUERIMIENTOS DE ANÁLISIS:
-    1. JERARQUÍA DE RIESGO: Los flujos deben seguir una lógica de "Risk-On" o "Risk-Off".
-    2. CONSISTENCIA TEMPORAL: El capital tiene inercia. Si no han ocurrido eventos disruptivos en las últimas 24-48 horas, los cambios en las métricas y flujos deben ser incrementales y no drásticos.
-    3. SELECCIÓN DE CENTROS DE GRAVEDAD: Los 'gravityCenters' DEBEN ser ÚNICAMENTE aquellos activos o regiones cuya Fuerza G calculada sea SUPERIOR a 8.0 (Fuerza G > 8.0). Si ningún activo supera este umbral, selecciona el que tenga el valor más alto cercano a 8.0.
-    4. JUSTIFICACIÓN: La descripción debe explicar el escenario actual usando los términos del modelo (Masa, Distancia, Fricción).
+A) COMPONENTES DE MASA (cada sub-variable de 0 a 100):
+   - retorno: yield esperado / earnings yield / dividend yield normalizado al rango histórico
+   - crecimiento: crecimiento EPS / PIB esperado, momentum precio (mayor = más atractivo)
+   - liquidezActivo: profundidad del mercado, volumen de trading, facilidad de entrada/salida
+   - confianza: estabilidad institucional, confianza macro, certeza política monetaria
+   - masa = w1×retorno + w2×crecimiento + w3×liquidezActivo + w4×confianza
 
-    ESTRUCTURA DE SALIDA (JSON):
-    Devuelve un objeto MarketScenario con:
-    - id: 'live'
-    - name: 'Realidad del Mercado en Vivo'
-    - description: Un resumen profundo (máx 3 frases) que JUSTIFIQUE los centros usando el modelo de Gravedad Financiera.
-    - gravityCenters: Array de IDs (USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil).
-    - flows: Array de objetos CapitalFlow { from, to, strength (0-1), label }.
-    - metrics: Un objeto donde cada clave es un ID de activo/país y el valor es:
-      { masa, masaJustificacion, distancia, distanciaJustificacion, friccion, friccionJustificacion }
+B) COMPONENTES DE DISTANCIA (cada sub-variable de 0 a 100):
+   - volatilidad: VIX / vol realizada del activo normalizada (mayor VIX = mayor distancia)
+   - spread: credit spread / CDS soberano normalizado (mayor spread = mayor distancia)
+   - correlacion: correlación cross-asset con mercado general 0.0-1.0 (usar como fracción)
+   - Fórmula: distancia_raw = volatilidad + spread + (1 - correlacion) × 100
+   - Normalizar distancia_raw a escala 0-100 relativa entre los 8 activos
 
-    REGLA CRÍTICA DE CONECTIVIDAD:
-    - TODOS los IDs (USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil) DEBEN aparecer al menos una vez en el array de 'flows'.
+C) COMPONENTES DE FRICCIÓN (cada sub-variable de 0 a 100):
+   - bidAskSpread: costo de transacción implícito (mayor spread = mayor fricción)
+   - restricciones: controles de capital, restricciones regulatorias, burocracia
+   - profundidad: liquidez del libro de órdenes (INVERSO: mayor profundidad = menor fricción)
+   - friccion = (bidAskSpread + restricciones + (100 - profundidad)) / 3
+   - friccion debe quedar en rango 1-30 (muy importante: no puede ser 0)
 
-    Usa estos IDs para consistencia: USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil.
-    IMPORTANTE: Todo el contenido de texto debe estar en ESPAÑOL.
+D) CALCULAR:
+   - fuerzaG = (masa - distancia) / friccion
+   - gravityCenters son SOLO activos con fuerzaG > 8.0
+
+PASO 4 — CALCULAR FLUJOS BILATERALES:
+Para cada par de flujo que identifiques (mínimo 6 flujos, máximo 10):
+   - flowTheoretical = (masa_from × masa_to) / (distancia_to × distancia_to) × (1 / friccion_to)
+   - zscoreAdjustment: estima en qué medida el flujo actual de ETFs/fondos difiere del típico histórico
+     * Usa datos de ETF flows buscados. Rango: -2.0 a +2.0
+     * Positivo = flujos por encima del promedio histórico hacia ese destino
+     * Negativo = flujos por debajo del promedio histórico
+   - flowFinal = flowTheoretical × (1 + zscoreAdjustment)
+   - Normaliza todos los flowFinal para que el mayor sea 1.0; ese es el campo strength
+
+REGLA CRÍTICA: Los 8 IDs (USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil) deben aparecer al menos una vez en flows.
+
+PASO 5 — CONSTRUIR RESPUESTA JSON:
+- id: "live"
+- name: "Realidad del Mercado en Vivo"
+- macroRegime: el régimen identificado en PASO 2
+- regimeWeights: los pesos usados
+- description: 2-3 frases en español justificando los centros de gravedad usando terminología del modelo (Masa, Distancia, Fricción, Flujo)
+- gravityCenters: solo IDs con fuerzaG > 8.0
+- flows: array con todos los flujos calculados
+- metrics: objeto con los 8 activos y sus métricas completas
+
+Todo el contenido de texto debe estar en ESPAÑOL.
   `;
 }
 
 function buildSchema() {
+  const masaComponentsObj = {
+    type: Type.OBJECT,
+    properties: {
+      retorno:       { type: Type.NUMBER },
+      crecimiento:   { type: Type.NUMBER },
+      liquidezActivo:{ type: Type.NUMBER },
+      confianza:     { type: Type.NUMBER },
+    },
+    required: ['retorno', 'crecimiento', 'liquidezActivo', 'confianza'],
+  };
+
+  const masaWeightsObj = {
+    type: Type.OBJECT,
+    properties: {
+      w1: { type: Type.NUMBER },
+      w2: { type: Type.NUMBER },
+      w3: { type: Type.NUMBER },
+      w4: { type: Type.NUMBER },
+    },
+    required: ['w1', 'w2', 'w3', 'w4'],
+  };
+
+  const distanciaComponentsObj = {
+    type: Type.OBJECT,
+    properties: {
+      volatilidad: { type: Type.NUMBER },
+      spread:      { type: Type.NUMBER },
+      correlacion: { type: Type.NUMBER },
+    },
+    required: ['volatilidad', 'spread', 'correlacion'],
+  };
+
+  const friccionComponentsObj = {
+    type: Type.OBJECT,
+    properties: {
+      bidAskSpread:  { type: Type.NUMBER },
+      restricciones: { type: Type.NUMBER },
+      profundidad:   { type: Type.NUMBER },
+    },
+    required: ['bidAskSpread', 'restricciones', 'profundidad'],
+  };
+
   const metricObject = {
     type: Type.OBJECT,
     properties: {
-      masa: { type: Type.NUMBER },
-      masaJustificacion: { type: Type.STRING },
-      distancia: { type: Type.NUMBER },
+      masa:                 { type: Type.NUMBER },
+      distancia:            { type: Type.NUMBER },
+      friccion:             { type: Type.NUMBER },
+      masaComponents:       masaComponentsObj,
+      masaWeights:          masaWeightsObj,
+      distanciaComponents:  distanciaComponentsObj,
+      friccionComponents:   friccionComponentsObj,
+      fuerzaG:              { type: Type.NUMBER },
+      zscoreFlows:          { type: Type.NUMBER },
+      masaJustificacion:    { type: Type.STRING },
       distanciaJustificacion: { type: Type.STRING },
-      friccion: { type: Type.NUMBER },
-      friccionJustificacion: { type: Type.STRING },
+      friccionJustificacion:  { type: Type.STRING },
     },
-    required: ['masa', 'masaJustificacion', 'distancia', 'distanciaJustificacion', 'friccion', 'friccionJustificacion'],
+    required: [
+      'masa', 'distancia', 'friccion',
+      'masaComponents', 'masaWeights',
+      'distanciaComponents', 'friccionComponents',
+      'fuerzaG', 'zscoreFlows',
+      'masaJustificacion', 'distanciaJustificacion', 'friccionJustificacion',
+    ],
+  };
+
+  const regimeWeightsObj = {
+    type: Type.OBJECT,
+    properties: {
+      w1: { type: Type.NUMBER },
+      w2: { type: Type.NUMBER },
+      w3: { type: Type.NUMBER },
+      w4: { type: Type.NUMBER },
+    },
+    required: ['w1', 'w2', 'w3', 'w4'],
   };
 
   return {
     type: Type.OBJECT,
     properties: {
-      id: { type: Type.STRING },
-      name: { type: Type.STRING },
-      description: { type: Type.STRING },
+      id:            { type: Type.STRING },
+      name:          { type: Type.STRING },
+      description:   { type: Type.STRING },
+      macroRegime:   { type: Type.STRING },
+      regimeWeights: regimeWeightsObj,
       gravityCenters: { type: Type.ARRAY, items: { type: Type.STRING } },
       flows: {
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
           properties: {
-            from: { type: Type.STRING },
-            to: { type: Type.STRING },
-            strength: { type: Type.NUMBER },
-            label: { type: Type.STRING },
+            from:              { type: Type.STRING },
+            to:                { type: Type.STRING },
+            strength:          { type: Type.NUMBER },
+            flowTheoretical:   { type: Type.NUMBER },
+            flowFinal:         { type: Type.NUMBER },
+            zscoreAdjustment:  { type: Type.NUMBER },
+            label:             { type: Type.STRING },
           },
-          required: ['from', 'to', 'strength', 'label'],
+          required: ['from', 'to', 'strength', 'flowTheoretical', 'flowFinal', 'zscoreAdjustment', 'label'],
         },
       },
       metrics: {
         type: Type.OBJECT,
         properties: {
-          USD: metricObject,
-          Europe: metricObject,
-          'Emerging Markets': metricObject,
-          Gold: metricObject,
-          Tech: metricObject,
-          Bonds: metricObject,
-          Crypto: metricObject,
-          Oil: metricObject,
+          USD:                  metricObject,
+          Europe:               metricObject,
+          'Emerging Markets':   metricObject,
+          Gold:                 metricObject,
+          Tech:                 metricObject,
+          Bonds:                metricObject,
+          Crypto:               metricObject,
+          Oil:                  metricObject,
         },
         required: ['USD', 'Europe', 'Emerging Markets', 'Gold', 'Tech', 'Bonds', 'Crypto', 'Oil'],
       },
     },
-    required: ['id', 'name', 'description', 'gravityCenters', 'flows', 'metrics'],
+    required: ['id', 'name', 'description', 'macroRegime', 'regimeWeights', 'gravityCenters', 'flows', 'metrics'],
   };
 }

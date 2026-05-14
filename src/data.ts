@@ -10,10 +10,32 @@ export enum Type {
 }
 
 export interface CapitalFlow {
-  from: string; // Country or Asset ID
-  to: string;   // Country or Asset ID
+  from: string;
+  to: string;
   strength: number;
+  flowTheoretical?: number;
+  flowFinal?: number;
+  zscoreAdjustment?: number;
   label: string;
+}
+
+export interface MasaComponents {
+  retorno: number;
+  crecimiento: number;
+  liquidezActivo: number;
+  confianza: number;
+}
+
+export interface DistanciaComponents {
+  volatilidad: number;
+  spread: number;
+  correlacion: number;
+}
+
+export interface FriccionComponents {
+  bidAskSpread: number;
+  restricciones: number;
+  profundidad: number;
 }
 
 export interface PriceData {
@@ -34,11 +56,17 @@ export interface MarketPrices {
 }
 
 export interface GravityMetrics {
-  masa: number;      // Atractivo / Retorno (0-100)
+  masa: number;
+  distancia: number;
+  friccion: number;
+  masaComponents?: MasaComponents;
+  masaWeights?: { w1: number; w2: number; w3: number; w4: number };
+  distanciaComponents?: DistanciaComponents;
+  friccionComponents?: FriccionComponents;
+  fuerzaG?: number;
+  zscoreFlows?: number;
   masaJustificacion?: string;
-  distancia: number; // Riesgo / Volatilidad (0-100)
   distanciaJustificacion?: string;
-  friccion: number;  // Liquidez / Regulación (0-100)
   friccionJustificacion?: string;
 }
 
@@ -47,10 +75,12 @@ export interface MarketScenario {
   name: string;
   description: string;
   flows: CapitalFlow[];
-  gravityCenters: string[]; // IDs of countries/assets that act as attractors
-  prices?: MarketPrices; // Optional, can be overridden by live data
-  lastUpdated?: number; // Timestamp of last update
-  metrics?: Record<string, GravityMetrics>; // Metrics for each asset/country
+  gravityCenters: string[];
+  macroRegime?: string;
+  regimeWeights?: { w1: number; w2: number; w3: number; w4: number };
+  prices?: MarketPrices;
+  lastUpdated?: number;
+  metrics?: Record<string, GravityMetrics>;
 }
 
 export const DEFAULT_PRICES: MarketPrices = {
