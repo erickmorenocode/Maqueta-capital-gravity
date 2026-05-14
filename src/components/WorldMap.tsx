@@ -434,6 +434,9 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, onPoint
   );
 };
 
+const MAP_WIDTH = 1000;
+const MAP_HEIGHT = 600;
+
 function drawSectorOverlay(
   g: d3.Selection<SVGGElement, unknown, null, undefined>,
   path: d3.GeoPath,
@@ -448,10 +451,12 @@ function drawSectorOverlay(
 
   const cx = (x0 + x1) / 2;
   const cy = (y0 + y1) / 2;
-  const bboxSize = Math.min(x1 - x0, y1 - y0);
-  const radius = Math.max(bboxSize * 0.28, 14);
-  const nodeR = Math.max(radius * 0.14, 2.5);
-  const textSize = Math.max(radius * 0.09, 4);
+  const bboxW = Math.max(x1 - x0, 1);
+  const bboxH = Math.max(y1 - y0, 1);
+  const targetScale = Math.min(8, 0.85 / Math.max(bboxW / MAP_WIDTH, bboxH / MAP_HEIGHT));
+  const radius = 70 / targetScale;
+  const nodeR = radius * 0.14;
+  const textSize = Math.min(radius * 0.09, 6);
 
   const { nodes, flows } = getSectorData(scenarioId);
   const sectorGroup = g.append('g').attr('class', 'country-sectors');
@@ -461,7 +466,7 @@ function drawSectorOverlay(
     .attr('cx', cx)
     .attr('cy', cy)
     .attr('r', radius * 0.15)
-    .attr('fill', '#FBBF24')
+    .attr('fill', '#22D3EE')
     .attr('opacity', 0.04);
 
   // Draw flow arcs (from sector → through center → to sector)
@@ -481,7 +486,7 @@ function drawSectorOverlay(
     sectorGroup.append('path')
       .attr('d', `M${fx},${fy} Q${cx},${cy} ${tx},${ty}`)
       .attr('fill', 'none')
-      .attr('stroke', '#FBBF24')
+      .attr('stroke', '#22D3EE')
       .attr('stroke-width', Math.max(flow.strength * 1.5, 0.4))
       .attr('opacity', 0.35 + flow.strength * 0.3)
       .attr('class', 'animate-flow');
@@ -502,7 +507,7 @@ function drawSectorOverlay(
         ${ax - uy * arrowSize - ux * arrowSize},${ay + ux * arrowSize - uy * arrowSize}
         ${ax + uy * arrowSize - ux * arrowSize},${ay - ux * arrowSize - uy * arrowSize}
       `)
-      .attr('fill', '#FBBF24')
+      .attr('fill', '#22D3EE')
       .attr('opacity', 0.5 + flow.strength * 0.3);
   });
 
@@ -522,7 +527,7 @@ function drawSectorOverlay(
       nodeGroup.append('circle')
         .attr('r', nodeR * 1.5)
         .attr('fill', 'none')
-        .attr('stroke', '#FBBF24')
+        .attr('stroke', '#22D3EE')
         .attr('stroke-width', 0.5)
         .attr('opacity', 0.5)
         .append('animate')
@@ -535,15 +540,15 @@ function drawSectorOverlay(
 
     nodeGroup.append('circle')
       .attr('r', nodeR)
-      .attr('fill', node.isGravityCenter ? '#FBBF24' : '#1e3a5f')
-      .attr('stroke', node.isGravityCenter ? '#FBBF24' : '#2563eb')
+      .attr('fill', node.isGravityCenter ? '#22D3EE' : '#1e3a5f')
+      .attr('stroke', node.isGravityCenter ? '#22D3EE' : '#2563eb')
       .attr('stroke-width', 0.5);
 
     // Masa indicator ring
     nodeGroup.append('circle')
       .attr('r', nodeR * (0.8 + node.masa / 200))
       .attr('fill', 'none')
-      .attr('stroke', node.isGravityCenter ? '#FBBF24' : '#1e3a5f')
+      .attr('stroke', node.isGravityCenter ? '#22D3EE' : '#1e3a5f')
       .attr('stroke-width', 0.3)
       .attr('opacity', 0.4);
 
@@ -552,7 +557,7 @@ function drawSectorOverlay(
       .text(sector.name)
       .attr('y', labelOffset)
       .attr('text-anchor', 'middle')
-      .attr('fill', node.isGravityCenter ? '#FBBF24' : '#94A3B8')
+      .attr('fill', node.isGravityCenter ? '#22D3EE' : '#94A3B8')
       .attr('font-size', `${textSize}px`)
       .attr('font-family', 'monospace')
       .attr('font-weight', 'bold')
@@ -563,7 +568,7 @@ function drawSectorOverlay(
       .text(`${node.masa}`)
       .attr('y', nodeR + textSize + 1)
       .attr('text-anchor', 'middle')
-      .attr('fill', node.isGravityCenter ? '#FBBF24' : '#4B6CB7')
+      .attr('fill', node.isGravityCenter ? '#22D3EE' : '#4B6CB7')
       .attr('font-size', `${textSize * 0.85}px`)
       .attr('font-family', 'monospace')
       .attr('pointer-events', 'none')
@@ -577,7 +582,7 @@ function drawSectorOverlay(
     .attr('y', cy + textSize * 0.4)
     .attr('text-anchor', 'middle')
     .attr('dominant-baseline', 'middle')
-    .attr('fill', '#FBBF24')
+    .attr('fill', '#22D3EE')
     .attr('font-size', `${Math.max(textSize * 0.9, 4)}px`)
     .attr('font-family', 'monospace')
     .attr('font-weight', 'bold')
