@@ -1,256 +1,257 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
-import { Type } from '@/src/data';
-import type { MarketScenario } from '@/src/data';
+import YahooFinance from 'yahoo-finance2';
+import type { MarketScenario, GravityMetrics, CapitalFlow } from '@/src/data';
 
-export async function GET() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY is not set' }, { status: 500 });
-  }
+export const dynamic = 'force-dynamic';
 
-  const ai = new GoogleGenAI({ apiKey: key });
-  const currentDate = new Date().toLocaleDateString('es-ES', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  });
+interface YFQuote {
+  regularMarketPrice?: number;
+  regularMarketChangePercent?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  fiftyDayAverage?: number;
+  twoHundredDayAverage?: number;
+}
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('Gemini request timed out after 30s')), 30_000)
+const yf = new YahooFinance();
+
+const ASSET_SYMBOLS: Record<string, string> = {
+  USD:                'DX-Y.NYB',
+  Europe:             'EZU',
+  'Emerging Markets': 'EEM',
+  Gold:               'GC=F',
+  Tech:               'QQQ',
+  Bonds:              'TLT',
+  Crypto:             'BTC-USD',
+  Oil:                'CL=F',
+};
+
+interface AssetBase {
+  liquidez: number;
+  friccion: number;
+  correlacion: number;
+  spreadBase: number;
+}
+
+const ASSET_BASE: Record<string, AssetBase> = {
+  USD:                { liquidez: 98, friccion: 5,  correlacion: 0.30, spreadBase: 5  },
+  Europe:             { liquidez: 75, friccion: 12, correlacion: 0.80, spreadBase: 25 },
+  'Emerging Markets': { liquidez: 65, friccion: 20, correlacion: 0.75, spreadBase: 45 },
+  Gold:               { liquidez: 85, friccion: 8,  correlacion: 0.50, spreadBase: 10 },
+  Tech:               { liquidez: 88, friccion: 6,  correlacion: 0.90, spreadBase: 15 },
+  Bonds:              { liquidez: 90, friccion: 7,  correlacion: 0.40, spreadBase: 12 },
+  Crypto:             { liquidez: 70, friccion: 15, correlacion: 0.55, spreadBase: 30 },
+  Oil:                { liquidez: 80, friccion: 10, correlacion: 0.60, spreadBase: 20 },
+};
+
+const REGIME_WEIGHTS: Record<string, { w1: number; w2: number; w3: number; w4: number }> = {
+  'risk-on':  { w1: 0.40, w2: 0.35, w3: 0.15, w4: 0.10 },
+  'risk-off': { w1: 0.15, w2: 0.10, w3: 0.35, w4: 0.40 },
+  'crisis':   { w1: 0.05, w2: 0.05, w3: 0.45, w4: 0.45 },
+  'neutral':  { w1: 0.25, w2: 0.25, w3: 0.25, w4: 0.25 },
+};
+
+function clamp(val: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, val));
+}
+
+interface RawMetrics extends GravityMetrics {
+  distanciaRaw: number;
+  changePercent: number;
+}
+
+function computeAssetMetrics(
+  assetId: string,
+  quote: YFQuote,
+  vix: number,
+  regime: string,
+  weights: { w1: number; w2: number; w3: number; w4: number },
+): RawMetrics {
+  const base = ASSET_BASE[assetId];
+  const price    = quote.regularMarketPrice ?? 100;
+  const low52    = quote.fiftyTwoWeekLow    ?? price * 0.80;
+  const high52   = quote.fiftyTwoWeekHigh   ?? price * 1.20;
+  const avg50    = quote.fiftyDayAverage    ?? price;
+  const changePct = quote.regularMarketChangePercent ?? 0;
+
+  // Retorno: position within 52-week range (0-100)
+  const rangeWidth = high52 - low52;
+  const retorno = Math.round(rangeWidth > 0 ? clamp(((price - low52) / rangeWidth) * 100, 0, 100) : 50);
+
+  // Crecimiento: momentum vs 50-day average
+  const momentum = avg50 > 0 ? ((price / avg50) - 1) * 200 : 0;
+  const crecimiento = Math.round(clamp(50 + momentum, 0, 100));
+
+  // LiquidezActivo: base adjusted by regime stress
+  const liquidezPenalty = regime === 'crisis' ? 10 : regime === 'risk-off' ? 5 : 0;
+  const liquidezActivo = Math.round(clamp(base.liquidez - liquidezPenalty, 0, 100));
+
+  // Confianza: trend direction + VIX penalty
+  const trendSign  = price >= avg50 ? 1 : -1;
+  const vixPenalty = clamp((vix - 15) * 2, 0, 50);
+  const confianza  = Math.round(clamp(65 + trendSign * 15 - vixPenalty, 0, 100));
+
+  const masa = Math.round(
+    weights.w1 * retorno +
+    weights.w2 * crecimiento +
+    weights.w3 * liquidezActivo +
+    weights.w4 * confianza,
   );
 
-  try {
-    const response = await Promise.race([
-      ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: buildPrompt(currentDate),
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: 'application/json',
-          responseSchema: buildSchema(),
-        },
-      }),
-      timeoutPromise,
-    ]);
+  // Volatilidad: 52-week range width as annualized vol proxy, scaled by VIX
+  const midPrice   = (high52 + low52) / 2;
+  const annualRange = midPrice > 0 ? ((high52 - low52) / midPrice) * 100 : 20;
+  const volatilidad = Math.round(clamp(annualRange * (vix / 20) * 0.5, 0, 100));
 
-    const text = response.text;
-    if (!text) throw new Error('Gemini returned empty response');
+  // Spread: base spread multiplied by regime
+  const spreadMult = regime === 'crisis' ? 2.5 : regime === 'risk-off' ? 1.5 : regime === 'risk-on' ? 0.7 : 1.0;
+  const spread     = Math.round(clamp(base.spreadBase * spreadMult, 0, 100));
 
-    const data = JSON.parse(text) as MarketScenario;
-    if (!data.id || !data.flows || !data.metrics) {
-      throw new Error('Gemini response missing required fields');
-    }
+  const correlacion    = base.correlacion;
+  const distanciaRaw   = volatilidad + spread + (1 - correlacion) * 100;
 
-    return NextResponse.json({ ...data, lastUpdated: Date.now() });
-  } catch (error) {
-    console.error('Gemini error:', error);
-    return NextResponse.json({ error: 'Failed to fetch live analysis' }, { status: 500 });
-  }
-}
+  // Friccion: base × regime multiplier, clamped 1-30
+  const fricMult = regime === 'crisis' ? 1.5 : regime === 'risk-off' ? 1.2 : 1.0;
+  const friccion = Math.round(clamp(base.friccion * fricMult, 1, 30));
 
-function buildPrompt(currentDate: string): string {
-  return `
-Eres un modelo cuantitativo de flujos de capital global. Fecha de análisis: ${currentDate}.
-
-PASO 1 — BÚSQUEDA OBLIGATORIA (usa googleSearch):
-Busca los siguientes datos de mercado en tiempo real:
-- DXY (índice dólar) nivel actual y tendencia semanal
-- VIX (volatilidad S&P500) nivel actual
-- MOVE Index (volatilidad bonos del Tesoro)
-- US10Y yield actual y pendiente de la curva (10Y-2Y spread)
-- IG credit spread y HY credit spread (Bloomberg o ICE BofA)
-- ETF flows de la última semana: SPY, QQQ, GLD, TLT, EEM (flujos netos en millones USD)
-- Postura actual de la Fed (hawkish/neutral/dovish)
-- PMI manufacturero global más reciente
-- CDS spreads soberanos de Europa y Mercados Emergentes
-- Precio del oro spot y variación semanal
-- Precio del petróleo WTI y variación semanal
-
-PASO 2 — IDENTIFICAR RÉGIMEN MACRO:
-Basándote en los datos buscados, clasifica el régimen actual:
-- "risk-on": VIX < 18, yield curve positiva, flujos ETF equity positivos, spreads HY estables
-- "risk-off": VIX 18-28, yield curve plana/invertida, flujos hacia TLT/GLD, spreads ampliándose
-- "crisis": VIX > 28, spreads HY > 500bps, flujos masivos a refugios (USD, bonos, oro)
-- "neutral": señales mixtas, VIX 15-20, sin tendencia clara
-
-Según el régimen, usa estos pesos dinámicos para calcular Masa:
-- risk-on:  w1=0.40 (retorno), w2=0.35 (crecimiento), w3=0.15 (liquidez), w4=0.10 (confianza)
-- risk-off: w1=0.15, w2=0.10, w3=0.35, w4=0.40
-- crisis:   w1=0.05, w2=0.05, w3=0.45, w4=0.45
-- neutral:  w1=0.25, w2=0.25, w3=0.25, w4=0.25
-
-PASO 3 — CALCULAR MÉTRICAS POR ACTIVO (escala 0-100):
-Para cada uno de los 8 activos (USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil):
-
-A) COMPONENTES DE MASA (cada sub-variable de 0 a 100):
-   - retorno: yield esperado / earnings yield / dividend yield normalizado al rango histórico
-   - crecimiento: crecimiento EPS / PIB esperado, momentum precio (mayor = más atractivo)
-   - liquidezActivo: profundidad del mercado, volumen de trading, facilidad de entrada/salida
-   - confianza: estabilidad institucional, confianza macro, certeza política monetaria
-   - masa = w1×retorno + w2×crecimiento + w3×liquidezActivo + w4×confianza
-
-B) COMPONENTES DE DISTANCIA (cada sub-variable de 0 a 100):
-   - volatilidad: VIX / vol realizada del activo normalizada (mayor VIX = mayor distancia)
-   - spread: credit spread / CDS soberano normalizado (mayor spread = mayor distancia)
-   - correlacion: correlación cross-asset con mercado general 0.0-1.0 (usar como fracción)
-   - Fórmula: distancia_raw = volatilidad + spread + (1 - correlacion) × 100
-   - Normalizar distancia_raw a escala 0-100 relativa entre los 8 activos
-
-C) COMPONENTES DE FRICCIÓN (cada sub-variable de 0 a 100):
-   - bidAskSpread: costo de transacción implícito (mayor spread = mayor fricción)
-   - restricciones: controles de capital, restricciones regulatorias, burocracia
-   - profundidad: liquidez del libro de órdenes (INVERSO: mayor profundidad = menor fricción)
-   - friccion = (bidAskSpread + restricciones + (100 - profundidad)) / 3
-   - friccion debe quedar en rango 1-30 (muy importante: no puede ser 0)
-
-D) CALCULAR:
-   - fuerzaG = (masa - distancia) / friccion
-   - gravityCenters son SOLO activos con fuerzaG > 8.0
-
-PASO 4 — CALCULAR FLUJOS BILATERALES:
-Para cada par de flujo que identifiques (mínimo 6 flujos, máximo 10):
-   - flowTheoretical = (masa_from × masa_to) / (distancia_to × distancia_to) × (1 / friccion_to)
-   - zscoreAdjustment: estima en qué medida el flujo actual de ETFs/fondos difiere del típico histórico
-     * Usa datos de ETF flows buscados. Rango: -2.0 a +2.0
-     * Positivo = flujos por encima del promedio histórico hacia ese destino
-     * Negativo = flujos por debajo del promedio histórico
-   - flowFinal = flowTheoretical × (1 + zscoreAdjustment)
-   - Normaliza todos los flowFinal para que el mayor sea 1.0; ese es el campo strength
-
-REGLA CRÍTICA: Los 8 IDs (USD, Europe, Emerging Markets, Gold, Tech, Bonds, Crypto, Oil) deben aparecer al menos una vez en flows.
-
-PASO 5 — CONSTRUIR RESPUESTA JSON:
-- id: "live"
-- name: "Realidad del Mercado en Vivo"
-- macroRegime: el régimen identificado en PASO 2
-- regimeWeights: los pesos usados
-- description: 2-3 frases en español justificando los centros de gravedad usando terminología del modelo (Masa, Distancia, Fricción, Flujo)
-- gravityCenters: solo IDs con fuerzaG > 8.0
-- flows: array con todos los flujos calculados
-- metrics: objeto con los 8 activos y sus métricas completas
-
-Todo el contenido de texto debe estar en ESPAÑOL.
-  `;
-}
-
-function buildSchema() {
-  const masaComponentsObj = {
-    type: Type.OBJECT,
-    properties: {
-      retorno:       { type: Type.NUMBER },
-      crecimiento:   { type: Type.NUMBER },
-      liquidezActivo:{ type: Type.NUMBER },
-      confianza:     { type: Type.NUMBER },
-    },
-    required: ['retorno', 'crecimiento', 'liquidezActivo', 'confianza'],
-  };
-
-  const masaWeightsObj = {
-    type: Type.OBJECT,
-    properties: {
-      w1: { type: Type.NUMBER },
-      w2: { type: Type.NUMBER },
-      w3: { type: Type.NUMBER },
-      w4: { type: Type.NUMBER },
-    },
-    required: ['w1', 'w2', 'w3', 'w4'],
-  };
-
-  const distanciaComponentsObj = {
-    type: Type.OBJECT,
-    properties: {
-      volatilidad: { type: Type.NUMBER },
-      spread:      { type: Type.NUMBER },
-      correlacion: { type: Type.NUMBER },
-    },
-    required: ['volatilidad', 'spread', 'correlacion'],
-  };
-
-  const friccionComponentsObj = {
-    type: Type.OBJECT,
-    properties: {
-      bidAskSpread:  { type: Type.NUMBER },
-      restricciones: { type: Type.NUMBER },
-      profundidad:   { type: Type.NUMBER },
-    },
-    required: ['bidAskSpread', 'restricciones', 'profundidad'],
-  };
-
-  const metricObject = {
-    type: Type.OBJECT,
-    properties: {
-      masa:                 { type: Type.NUMBER },
-      distancia:            { type: Type.NUMBER },
-      friccion:             { type: Type.NUMBER },
-      masaComponents:       masaComponentsObj,
-      masaWeights:          masaWeightsObj,
-      distanciaComponents:  distanciaComponentsObj,
-      friccionComponents:   friccionComponentsObj,
-      fuerzaG:              { type: Type.NUMBER },
-      zscoreFlows:          { type: Type.NUMBER },
-      masaJustificacion:    { type: Type.STRING },
-      distanciaJustificacion: { type: Type.STRING },
-      friccionJustificacion:  { type: Type.STRING },
-    },
-    required: [
-      'masa', 'distancia', 'friccion',
-      'masaComponents', 'masaWeights',
-      'distanciaComponents', 'friccionComponents',
-      'fuerzaG', 'zscoreFlows',
-      'masaJustificacion', 'distanciaJustificacion', 'friccionJustificacion',
-    ],
-  };
-
-  const regimeWeightsObj = {
-    type: Type.OBJECT,
-    properties: {
-      w1: { type: Type.NUMBER },
-      w2: { type: Type.NUMBER },
-      w3: { type: Type.NUMBER },
-      w4: { type: Type.NUMBER },
-    },
-    required: ['w1', 'w2', 'w3', 'w4'],
-  };
+  const bidAskSpread  = Math.round(clamp(base.friccion * 0.40 * fricMult, 1, 30));
+  const restricciones = Math.round(clamp(base.friccion * 0.35 * fricMult, 1, 30));
+  const profundidad   = Math.round(clamp(base.liquidez * 0.90, 0, 100));
 
   return {
-    type: Type.OBJECT,
-    properties: {
-      id:            { type: Type.STRING },
-      name:          { type: Type.STRING },
-      description:   { type: Type.STRING },
-      macroRegime:   { type: Type.STRING },
-      regimeWeights: regimeWeightsObj,
-      gravityCenters: { type: Type.ARRAY, items: { type: Type.STRING } },
-      flows: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            from:              { type: Type.STRING },
-            to:                { type: Type.STRING },
-            strength:          { type: Type.NUMBER },
-            flowTheoretical:   { type: Type.NUMBER },
-            flowFinal:         { type: Type.NUMBER },
-            zscoreAdjustment:  { type: Type.NUMBER },
-            label:             { type: Type.STRING },
-          },
-          required: ['from', 'to', 'strength', 'flowTheoretical', 'flowFinal', 'zscoreAdjustment', 'label'],
-        },
-      },
-      metrics: {
-        type: Type.OBJECT,
-        properties: {
-          USD:                  metricObject,
-          Europe:               metricObject,
-          'Emerging Markets':   metricObject,
-          Gold:                 metricObject,
-          Tech:                 metricObject,
-          Bonds:                metricObject,
-          Crypto:               metricObject,
-          Oil:                  metricObject,
-        },
-        required: ['USD', 'Europe', 'Emerging Markets', 'Gold', 'Tech', 'Bonds', 'Crypto', 'Oil'],
-      },
-    },
-    required: ['id', 'name', 'description', 'macroRegime', 'regimeWeights', 'gravityCenters', 'flows', 'metrics'],
+    masa,
+    distancia: Math.round(distanciaRaw), // will be overwritten after normalization
+    friccion,
+    masaComponents:      { retorno, crecimiento, liquidezActivo, confianza },
+    masaWeights:         weights,
+    distanciaComponents: { volatilidad, spread, correlacion },
+    friccionComponents:  { bidAskSpread, restricciones, profundidad },
+    fuerzaG:             0, // placeholder
+    zscoreFlows:         parseFloat((changePct / 2).toFixed(2)),
+    masaJustificacion:   `Ret=${retorno}(52s) Crec=${crecimiento}(50d) Liq=${liquidezActivo} Conf=${confianza}`,
+    distanciaJustificacion: `Vol52s=${annualRange.toFixed(1)}%×VIX=${vix.toFixed(1)} → vol=${volatilidad}, spr=${spread}`,
+    friccionJustificacion:  `F_base=${base.friccion}×${fricMult}=${friccion}`,
+    distanciaRaw,
+    changePercent: changePct,
   };
+}
+
+function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
+  const assets = Object.keys(metrics);
+  const rawFlows: Array<{
+    from: string; to: string;
+    flowTheoretical: number; flowFinal: number; zscoreAdjustment: number;
+  }> = [];
+
+  for (const from of assets) {
+    for (const to of assets) {
+      if (from === to) continue;
+      const mF = metrics[from];
+      const mT = metrics[to];
+      const dSq  = Math.pow(Math.max(1, mT.distancia), 2);
+      const fric = Math.max(1, mT.friccion);
+      const flowTheoretical = (mF.masa * mT.masa) / dSq / fric;
+      if (flowTheoretical < 5) continue;
+      const zscore = clamp(mF.zscoreFlows ?? 0, -0.8, 2.0);
+      const flowFinal = flowTheoretical * (1 + zscore);
+      rawFlows.push({ from, to, flowTheoretical, flowFinal, zscoreAdjustment: parseFloat((mF.zscoreFlows ?? 0).toFixed(2)) });
+    }
+  }
+
+  rawFlows.sort((a, b) => b.flowFinal - a.flowFinal);
+  const top = rawFlows.slice(0, 10);
+  if (top.length === 0) return [];
+
+  const maxFlow = top[0].flowFinal;
+  return top.map(({ from, to, flowTheoretical, flowFinal, zscoreAdjustment }) => ({
+    from,
+    to,
+    strength:          parseFloat((flowFinal / maxFlow).toFixed(3)),
+    flowTheoretical:   parseFloat(flowTheoretical.toFixed(3)),
+    flowFinal:         parseFloat(flowFinal.toFixed(3)),
+    zscoreAdjustment,
+    label: `Flujo ${from} → ${to} (FG: ${(metrics[to].fuerzaG ?? 0).toFixed(1)})`,
+  }));
+}
+
+export async function GET() {
+  try {
+    const allSymbols = [...Object.values(ASSET_SYMBOLS), '^VIX', '^TNX'];
+
+    const quotes = await Promise.all(
+      allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null)),
+    );
+
+    const quoteMap: Record<string, YFQuote> = {};
+    allSymbols.forEach((sym, i) => {
+      if (quotes[i]) quoteMap[sym] = quotes[i]!;
+    });
+
+    const vix   = quoteMap['^VIX']?.regularMarketPrice ?? 20;
+    const us10y = quoteMap['^TNX']?.regularMarketPrice ?? 4.3;
+
+    const regime: 'risk-on' | 'risk-off' | 'crisis' | 'neutral' =
+      vix > 28 ? 'crisis' :
+      vix < 18 ? 'risk-on' :
+      vix <= 28 ? 'risk-off' :
+      'neutral';
+
+    const weights = REGIME_WEIGHTS[regime];
+
+    // Compute raw metrics for each asset
+    const rawMap: Record<string, RawMetrics> = {};
+    for (const [assetId, symbol] of Object.entries(ASSET_SYMBOLS)) {
+      rawMap[assetId] = computeAssetMetrics(
+        assetId,
+        quoteMap[symbol] ?? {},
+        vix,
+        regime,
+        weights,
+      );
+    }
+
+    // Normalize distancia to 10-90 range across all assets
+    const rawValues = Object.values(rawMap).map(m => m.distanciaRaw);
+    const minD = Math.min(...rawValues);
+    const maxD = Math.max(...rawValues);
+    const rangeD = maxD - minD || 1;
+
+    const metrics: Record<string, GravityMetrics> = {};
+    for (const [assetId, raw] of Object.entries(rawMap)) {
+      const distancia = Math.round(((raw.distanciaRaw - minD) / rangeD) * 80 + 10);
+      const fuerzaG   = parseFloat(((raw.masa - distancia) / Math.max(1, raw.friccion)).toFixed(2));
+      const { distanciaRaw: _dr, changePercent: _cp, ...rest } = raw;
+      metrics[assetId] = { ...rest, distancia, fuerzaG };
+    }
+
+    const gravityCenters = Object.entries(metrics)
+      .filter(([, m]) => (m.fuerzaG ?? 0) > 8)
+      .map(([id]) => id);
+
+    const flows = computeFlows(metrics);
+
+    const topAssets = gravityCenters.slice(0, 3).join(', ') || 'ninguno';
+    const description =
+      `Régimen ${regime.toUpperCase()} detectado (VIX=${vix.toFixed(1)}, US10Y=${us10y.toFixed(2)}%). ` +
+      `Capital fluye hacia ${topAssets}. ` +
+      `Pesos: Ret w1=${weights.w1}, Crec w2=${weights.w2}, Liq w3=${weights.w3}, Conf w4=${weights.w4}.`;
+
+    const scenario: MarketScenario = {
+      id:            'live',
+      name:          'Realidad del Mercado en Vivo',
+      description,
+      macroRegime:   regime,
+      regimeWeights: weights,
+      gravityCenters,
+      flows,
+      metrics,
+      lastUpdated:   Date.now(),
+    };
+
+    return NextResponse.json(scenario);
+  } catch (error) {
+    console.error('Live analysis error:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Failed to fetch live analysis', detail: message }, { status: 500 });
+  }
 }

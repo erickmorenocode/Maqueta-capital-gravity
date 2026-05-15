@@ -59,6 +59,7 @@ export default function App() {
   const [activeScenario, setActiveScenario] = useState<MarketScenario>(SCENARIOS[0]);
   const [marketPrices, setMarketPrices] = useState<MarketPrices>(DEFAULT_PRICES);
   const [isLiveLoading, setIsLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [scenarios, setScenarios] = useState<MarketScenario[]>(SCENARIOS);
   const [selectedPoint, setSelectedPoint] = useState<GeoPoint | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -116,6 +117,7 @@ export default function App() {
 
   const handleFetchLive = async (force = false) => {
     setIsLiveLoading(true);
+    setLiveError(null);
     try {
       const liveScenario = await fetchLiveMarketGravity(force);
       
@@ -137,7 +139,8 @@ export default function App() {
       setActiveScenario(liveScenario);
     } catch (error) {
       console.error("Failed to fetch live data", error);
-      // If error, remove the "Cargando..." placeholder and fallback to Hawkish
+      const msg = error instanceof Error ? error.message : String(error);
+      setLiveError(msg);
       setScenarios(prev => prev.filter(s => s.id !== 'current'));
       if (activeScenarioRef.current.id === 'current') {
         const hawkish = SCENARIOS.find(s => s.id === 'hawkish') ?? SCENARIOS[0];
@@ -188,6 +191,14 @@ export default function App() {
             )}
             {isLiveLoading ? 'Analizando Mercados...' : 'Analizar Realidad en Tiempo Real'}
           </button>
+          {liveError && (
+            <span
+              className="text-[9px] font-mono text-danger truncate max-w-[220px]"
+              title={liveError}
+            >
+              Error: {liveError.slice(0, 60)}
+            </span>
+          )}
           <div className="hidden md:flex items-center gap-4 text-[10px] font-mono text-ink/60">
             <div className="flex items-center gap-1.5">
               <Activity className="w-3 h-3 text-accent" />
