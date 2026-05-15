@@ -95,7 +95,17 @@ function mapRegimeToScenario(regime?: string): string {
   }
 }
 
-export function getSectorData(scenarioId: string, macroRegime?: string): { nodes: SectorNode[]; flows: SectorFlow[] } {
+export function getSectorData(
+  scenarioId: string,
+  macroRegime?: string,
+  liveSectorData?: {
+    nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
+    flows: Array<{ from: string; to: string; strength: number }>;
+  },
+): { nodes: SectorNode[]; flows: SectorFlow[] } {
+  if ((scenarioId === 'live' || scenarioId === 'current') && liveSectorData) {
+    return liveSectorData as { nodes: SectorNode[]; flows: SectorFlow[] };
+  }
   const effectiveId = scenarioId === 'live' || scenarioId === 'current'
     ? mapRegimeToScenario(macroRegime)
     : scenarioId;
