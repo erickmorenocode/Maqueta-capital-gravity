@@ -85,6 +85,10 @@ export interface MarketScenario {
     nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
     flows: Array<{ from: string; to: string; strength: number }>;
   };
+  countrySectorData?: Record<string, {
+    nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
+    flows: Array<{ from: string; to: string; strength: number }>;
+  }>;
 }
 
 export const DEFAULT_PRICES: MarketPrices = {

@@ -183,7 +183,15 @@ export function getSectorData(
     flows: Array<{ from: string; to: string; strength: number }>;
   },
   countryName?: string,
+  countrySectorData?: Record<string, {
+    nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
+    flows: Array<{ from: string; to: string; strength: number }>;
+  }>,
 ): { nodes: SectorNode[]; flows: SectorFlow[] } {
+  // Priority 1: server-computed country-specific data (live mode)
+  if ((scenarioId === 'live' || scenarioId === 'current') && countryName && countrySectorData?.[countryName]) {
+    return countrySectorData[countryName] as { nodes: SectorNode[]; flows: SectorFlow[] };
+  }
   if ((scenarioId === 'live' || scenarioId === 'current') && liveSectorData) {
     const nodes = countryName
       ? applyCountryProfile(liveSectorData.nodes as SectorNode[], countryName)
@@ -475,7 +483,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
 
       // Redraw sector overlay if country already selected (scenario change)
       if (selectedFeatureRef.current) {
-        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData);
+        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData, scenario.countrySectorData);
       }
     });
 
@@ -489,7 +497,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
     if (!g || !path) return;
     g.selectAll('.country-sectors').remove();
     if (!selectedCountry || !selectedFeatureRef.current) return;
-    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData);
+    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData, scenario.countrySectorData);
   }, [selectedCountry, scenario.id]);
 
   const handleReset = () => {
@@ -574,6 +582,7 @@ function drawSectorOverlay(
   onSectorClick?: (sectorId: string) => void,
   macroRegime?: string,
   liveSectorData?: { nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>; flows: Array<{ from: string; to: string; strength: number }> },
+  countrySectorData?: Record<string, { nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>; flows: Array<{ from: string; to: string; strength: number }> }>,
 ) {
   g.selectAll('.country-sectors').remove();
 
@@ -589,7 +598,7 @@ function drawSectorOverlay(
   const nodeR = radius * 0.14;
   const textSize = Math.min(radius * 0.09, 6);
 
-  const { nodes, flows } = getSectorData(scenarioId, macroRegime, liveSectorData, countryName);
+  const { nodes, flows } = getSectorData(scenarioId, macroRegime, liveSectorData, countryName, countrySectorData);
   const sectorGroup = g.append('g').attr('class', 'country-sectors');
 
   // Background glow on center
