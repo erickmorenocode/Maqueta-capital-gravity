@@ -15,6 +15,50 @@ interface WorldMapProps {
 
 const G8_ISO_IDS = new Set(['840', '124', '250', '276', '380', '392', '826', '643']);
 
+// Structural sector dominance per G8 country [0-100] based on real economic weight
+const G8_COUNTRY_SECTOR_PROFILES: Record<string, Record<string, number>> = {
+  'EE.UU.': {
+    technology: 92, communication: 78, cons_discretionary: 72, cons_staples: 45,
+    energy: 55, financial: 82, healthcare: 80, industrials: 65,
+    real_estate: 58, basic_materials: 38, utilities: 32,
+  },
+  'Canadá': {
+    technology: 42, communication: 48, cons_discretionary: 45, cons_staples: 60,
+    energy: 90, financial: 78, healthcare: 52, industrials: 60,
+    real_estate: 72, basic_materials: 85, utilities: 58,
+  },
+  'Francia': {
+    technology: 52, communication: 60, cons_discretionary: 80, cons_staples: 88,
+    energy: 50, financial: 72, healthcare: 78, industrials: 82,
+    real_estate: 65, basic_materials: 58, utilities: 65,
+  },
+  'Alemania': {
+    technology: 62, communication: 52, cons_discretionary: 85, cons_staples: 65,
+    energy: 55, financial: 62, healthcare: 68, industrials: 95,
+    real_estate: 45, basic_materials: 80, utilities: 52,
+  },
+  'Italia': {
+    technology: 38, communication: 50, cons_discretionary: 70, cons_staples: 78,
+    energy: 52, financial: 65, healthcare: 60, industrials: 78,
+    real_estate: 68, basic_materials: 55, utilities: 62,
+  },
+  'Japón': {
+    technology: 82, communication: 65, cons_discretionary: 80, cons_staples: 70,
+    energy: 30, financial: 60, healthcare: 72, industrials: 92,
+    real_estate: 52, basic_materials: 65, utilities: 48,
+  },
+  'Reino Unido': {
+    technology: 55, communication: 65, cons_discretionary: 62, cons_staples: 80,
+    energy: 70, financial: 95, healthcare: 75, industrials: 60,
+    real_estate: 70, basic_materials: 52, utilities: 62,
+  },
+  'Rusia': {
+    technology: 30, communication: 42, cons_discretionary: 32, cons_staples: 52,
+    energy: 98, financial: 45, healthcare: 38, industrials: 58,
+    real_estate: 38, basic_materials: 85, utilities: 68,
+  },
+};
+
 const ISO_NAMES: Record<string, string> = {
   '004': 'Afganistán', '008': 'Albania', '012': 'Argelia', '020': 'Andorra',
   '024': 'Angola', '028': 'Antigua y Barbuda', '031': 'Azerbaiyán',
@@ -97,6 +141,21 @@ function mapRegimeToScenario(regime?: string): string {
   }
 }
 
+function applyCountryProfile(
+  nodes: SectorNode[],
+  countryName: string,
+): SectorNode[] {
+  const profile = G8_COUNTRY_SECTOR_PROFILES[countryName];
+  if (!profile) return nodes;
+  const FRICCION = 10;
+  return nodes.map(node => {
+    const dominance = profile[node.id] ?? 50;
+    const masa = Math.round(Math.max(5, Math.min(100, node.masa * 0.5 + dominance * 0.5)));
+    const distancia = Math.round(Math.max(10, Math.min(90, node.distancia * (1 - (dominance - 50) / 250))));
+    return { ...node, masa, distancia, isGravityCenter: (masa - distancia) / FRICCION > 3.0 };
+  });
+}
+
 export function getSectorData(
   scenarioId: string,
   macroRegime?: string,
@@ -104,9 +163,13 @@ export function getSectorData(
     nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
     flows: Array<{ from: string; to: string; strength: number }>;
   },
+  countryName?: string,
 ): { nodes: SectorNode[]; flows: SectorFlow[] } {
   if ((scenarioId === 'live' || scenarioId === 'current') && liveSectorData) {
-    return liveSectorData as { nodes: SectorNode[]; flows: SectorFlow[] };
+    const nodes = countryName
+      ? applyCountryProfile(liveSectorData.nodes as SectorNode[], countryName)
+      : liveSectorData.nodes as SectorNode[];
+    return { nodes, flows: liveSectorData.flows as SectorFlow[] };
   }
   const effectiveId = scenarioId === 'live' || scenarioId === 'current'
     ? mapRegimeToScenario(macroRegime)
@@ -184,11 +247,12 @@ export function getSectorData(
 
   const metrics = metricsMap[effectiveId] ?? fallback;
 
-  const nodes: SectorNode[] = SECTORS.map(s => {
+  const baseNodes: SectorNode[] = SECTORS.map(s => {
     const m = metrics[s.id] ?? { masa: 50, distancia: 50 };
     const force = (m.masa - m.distancia) / FRICCION;
     return { id: s.id, masa: m.masa, distancia: m.distancia, isGravityCenter: force > 3.0 };
   });
+  const nodes = countryName ? applyCountryProfile(baseNodes, countryName) : baseNodes;
 
   const flowsMap: Record<string, SectorFlow[]> = {
     hawkish: [
@@ -431,7 +495,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
 
       // Redraw sector overlay if country already selected (scenario change)
       if (selectedFeatureRef.current) {
-        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current, scenario.macroRegime);
+        drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry ?? '', scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData);
       }
     });
 
@@ -445,7 +509,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
     if (!g || !path) return;
     g.selectAll('.country-sectors').remove();
     if (!selectedCountry || !selectedFeatureRef.current) return;
-    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current, scenario.macroRegime);
+    drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData);
   }, [selectedCountry, scenario.id]);
 
   const handleReset = () => {
@@ -528,7 +592,8 @@ function drawSectorOverlay(
   countryName: string,
   scenarioId: string,
   onSectorClick?: (sectorId: string) => void,
-  macroRegime?: string
+  macroRegime?: string,
+  liveSectorData?: { nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>; flows: Array<{ from: string; to: string; strength: number }> },
 ) {
   g.selectAll('.country-sectors').remove();
 
@@ -544,7 +609,7 @@ function drawSectorOverlay(
   const nodeR = radius * 0.14;
   const textSize = Math.min(radius * 0.09, 6);
 
-  const { nodes, flows } = getSectorData(scenarioId, macroRegime);
+  const { nodes, flows } = getSectorData(scenarioId, macroRegime, liveSectorData, countryName);
   const sectorGroup = g.append('g').attr('class', 'country-sectors');
 
   // Background glow on center
