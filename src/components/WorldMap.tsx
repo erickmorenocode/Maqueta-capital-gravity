@@ -18,9 +18,9 @@ const G8_ISO_IDS = new Set(['840', '124', '250', '276', '380', '392', '826', '64
 // Structural sector dominance per G8 country [0-100] based on real economic weight
 const G8_COUNTRY_SECTOR_PROFILES: Record<string, Record<string, number>> = {
   'EE.UU.': {
-    technology: 92, communication: 78, cons_discretionary: 72, cons_staples: 45,
-    energy: 55, financial: 82, healthcare: 80, industrials: 65,
-    real_estate: 58, basic_materials: 38, utilities: 32,
+    technology: 95, communication: 88, cons_discretionary: 85, cons_staples: 80,
+    energy: 78, financial: 90, healthcare: 87, industrials: 82,
+    real_estate: 80, basic_materials: 75, utilities: 72,
   },
   'Canadá': {
     technology: 42, communication: 48, cons_discretionary: 45, cons_staples: 60,
@@ -141,6 +141,25 @@ function mapRegimeToScenario(regime?: string): string {
   }
 }
 
+function computeFlows(nodes: SectorNode[], topN = 6): SectorFlow[] {
+  const candidates: Array<{ from: string; to: string; score: number }> = [];
+  for (const from of nodes) {
+    for (const to of nodes) {
+      if (from.id === to.id) continue;
+      const score = (from.masa * to.masa) / Math.max(1, to.distancia ** 2);
+      candidates.push({ from: from.id, to: to.id, score });
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  const top = candidates.slice(0, topN);
+  const maxScore = top[0]?.score ?? 1;
+  return top.map(f => ({
+    from: f.from,
+    to: f.to,
+    strength: Math.round((f.score / maxScore) * 100) / 100,
+  }));
+}
+
 function applyCountryProfile(
   nodes: SectorNode[],
   countryName: string,
@@ -169,7 +188,7 @@ export function getSectorData(
     const nodes = countryName
       ? applyCountryProfile(liveSectorData.nodes as SectorNode[], countryName)
       : liveSectorData.nodes as SectorNode[];
-    return { nodes, flows: liveSectorData.flows as SectorFlow[] };
+    return { nodes, flows: computeFlows(nodes) };
   }
   const effectiveId = scenarioId === 'live' || scenarioId === 'current'
     ? mapRegimeToScenario(macroRegime)
@@ -254,46 +273,7 @@ export function getSectorData(
   });
   const nodes = countryName ? applyCountryProfile(baseNodes, countryName) : baseNodes;
 
-  const flowsMap: Record<string, SectorFlow[]> = {
-    hawkish: [
-      { from: 'technology',         to: 'financial',  strength: 0.88 },
-      { from: 'real_estate',        to: 'financial',  strength: 0.92 },
-      { from: 'cons_discretionary', to: 'financial',  strength: 0.72 },
-      { from: 'communication',      to: 'financial',  strength: 0.65 },
-      { from: 'cons_discretionary', to: 'cons_staples', strength: 0.60 },
-      { from: 'technology',         to: 'healthcare', strength: 0.55 },
-    ],
-    dovish: [
-      { from: 'financial',     to: 'technology',         strength: 0.88 },
-      { from: 'utilities',     to: 'real_estate',        strength: 0.76 },
-      { from: 'cons_staples',  to: 'cons_discretionary', strength: 0.72 },
-      { from: 'financial',     to: 'communication',      strength: 0.65 },
-      { from: 'basic_materials', to: 'industrials',      strength: 0.60 },
-    ],
-    crisis: [
-      { from: 'technology',         to: 'healthcare',   strength: 0.92 },
-      { from: 'real_estate',        to: 'utilities',    strength: 0.88 },
-      { from: 'cons_discretionary', to: 'cons_staples', strength: 0.92 },
-      { from: 'financial',          to: 'healthcare',   strength: 0.76 },
-      { from: 'communication',      to: 'cons_staples', strength: 0.70 },
-      { from: 'industrials',        to: 'utilities',    strength: 0.65 },
-    ],
-    liquidity: [
-      { from: 'utilities',       to: 'technology',         strength: 0.92 },
-      { from: 'cons_staples',    to: 'real_estate',        strength: 0.82 },
-      { from: 'financial',       to: 'technology',         strength: 0.76 },
-      { from: 'financial',       to: 'communication',      strength: 0.70 },
-      { from: 'basic_materials', to: 'industrials',        strength: 0.65 },
-    ],
-  };
-
-  const flows = flowsMap[effectiveId] ?? [
-    { from: 'technology',    to: 'financial',          strength: 0.50 },
-    { from: 'cons_staples',  to: 'cons_discretionary', strength: 0.40 },
-    { from: 'energy',        to: 'industrials',        strength: 0.40 },
-  ];
-
-  return { nodes, flows };
+  return { nodes, flows: computeFlows(nodes) };
 }
 
 export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme = 'dark', onPointClick, onCountrySelect, onSectorClick }) => {
