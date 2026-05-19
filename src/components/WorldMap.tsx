@@ -13,6 +13,8 @@ interface WorldMapProps {
   onSectorClick?: (sectorId: string) => void;
 }
 
+const G8_ISO_IDS = new Set(['840', '124', '250', '276', '380', '392', '826', '643']);
+
 const ISO_NAMES: Record<string, string> = {
   '004': 'Afganistán', '008': 'Albania', '012': 'Argelia', '020': 'Andorra',
   '024': 'Angola', '028': 'Antigua y Barbuda', '031': 'Azerbaiyán',
@@ -233,10 +235,12 @@ export function getSectorData(
 export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme = 'dark', onPointClick, onCountrySelect, onSectorClick }) => {
   const isLight = theme === 'light';
   const mc = {
-    countryFill:   isLight ? '#dde8f4' : '#1a1a1a',
-    countryStroke: isLight ? '#b0c4d8' : '#333',
-    hoverFill:     isLight ? '#c8d8ec' : '#252525',
-    hoverStroke:   isLight ? '#8aaccc' : '#555',
+    countryFill:   isLight ? '#e8eef5' : '#111111',
+    countryStroke: isLight ? '#ccd6e0' : '#222',
+    g8Fill:        isLight ? '#b8cfe8' : '#1a3a5c',
+    g8Stroke:      isLight ? '#7aaed4' : '#2a5a8c',
+    hoverFill:     isLight ? '#a0bfdc' : '#1e4a70',
+    hoverStroke:   isLight ? '#5a9ac8' : '#3a7abf',
     accentColor:   isLight ? '#00aa55' : '#00ff88',
     dotSecondary:  isLight ? 'rgba(30,30,30,0.65)' : 'rgba(255,255,255,0.8)',
     textSecondary: isLight ? '#1e293b' : '#fff',
@@ -292,29 +296,32 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
         .append('path')
         .attr('class', 'country')
         .attr('d', (d: any) => path(d) ?? '')
-        .attr('fill', mc.countryFill)
-        .attr('stroke', mc.countryStroke)
+        .attr('fill', (d: any) => G8_ISO_IDS.has(String(d.id)) ? mc.g8Fill : mc.countryFill)
+        .attr('stroke', (d: any) => G8_ISO_IDS.has(String(d.id)) ? mc.g8Stroke : mc.countryStroke)
         .attr('stroke-width', 0.5)
-        .style('cursor', 'pointer')
+        .style('cursor', (d: any) => G8_ISO_IDS.has(String(d.id)) ? 'pointer' : 'default')
         .on('mouseenter', function (this: SVGPathElement, _event: any, d: any) {
+          if (!G8_ISO_IDS.has(String(d.id))) return;
           if (selectedFeatureRef.current?.id !== d.id) {
             d3.select(this).attr('fill', mc.hoverFill).attr('stroke', mc.hoverStroke);
           }
         })
         .on('mouseleave', function (this: SVGPathElement, _event: any, d: any) {
+          if (!G8_ISO_IDS.has(String(d.id))) return;
           if (selectedFeatureRef.current?.id !== d.id) {
-            d3.select(this).attr('fill', mc.countryFill).attr('stroke', mc.countryStroke);
+            d3.select(this).attr('fill', mc.g8Fill).attr('stroke', mc.g8Stroke);
           }
         })
         .on('click', function (this: SVGPathElement, event: any, d: any) {
+          if (!G8_ISO_IDS.has(String(d.id))) return;
           event.stopPropagation();
 
           const name = ISO_NAMES[String(d.id)] ?? `País ${d.id}`;
           selectedFeatureRef.current = d;
 
           g.selectAll('path.country')
-            .attr('fill', mc.countryFill)
-            .attr('stroke', mc.countryStroke)
+            .attr('fill', (cd: any) => G8_ISO_IDS.has(String(cd.id)) ? mc.g8Fill : mc.countryFill)
+            .attr('stroke', (cd: any) => G8_ISO_IDS.has(String(cd.id)) ? mc.g8Stroke : mc.countryStroke)
             .attr('stroke-width', 0.5);
 
           d3.select(this)
@@ -448,8 +455,8 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
 
     if (gRef.current) {
       gRef.current.selectAll('path.country')
-        .attr('fill', mc.countryFill)
-        .attr('stroke', mc.countryStroke)
+        .attr('fill', (d: any) => G8_ISO_IDS.has(String(d.id)) ? mc.g8Fill : mc.countryFill)
+        .attr('stroke', (d: any) => G8_ISO_IDS.has(String(d.id)) ? mc.g8Stroke : mc.countryStroke)
         .attr('stroke-width', 0.5);
       gRef.current.selectAll('.country-sectors').remove();
     }
@@ -498,12 +505,14 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
           <div className="w-3 h-3 rounded-full bg-white/20" />
           <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest">Mercados Secundarios</span>
         </div>
-        {!selectedCountry && (
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-3 h-0.5 bg-white/15" />
-            <span className="text-[9px] font-mono text-white/25 uppercase tracking-widest">Click país = flujo sectorial</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 mt-1">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#1a3a5c' }} />
+          <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: '#3a7abf' }}>G8 — Click para flujo sectorial</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#111111' }} />
+          <span className="text-[9px] font-mono text-white/20 uppercase tracking-widest">Resto del mundo (no disponible)</span>
+        </div>
       </div>
     </div>
   );
