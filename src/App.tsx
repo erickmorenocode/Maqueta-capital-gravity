@@ -27,26 +27,29 @@ function cn(...inputs: ClassValue[]) {
 }
 
 function deriveSectorComponents(masa: number, distancia: number) {
-  // Masa: M = 0.25*(retorno+crecimiento+liquidezActivo+confianza)
-  // multipliers sum to 4.0 so 0.25*sum = masa exactly
-  const retorno        = Math.round(masa * 0.90);
-  const crecimiento    = Math.round(masa * 0.85);
-  const liquidezActivo = Math.round(masa * 1.05);
-  const confianza      = 4 * masa - retorno - crecimiento - liquidezActivo;
+  // MASA: M = w1×Return + w2×Growth + w3×Liquidity + w4×Confidence
+  // Return   = PriceReturn×0.4 + Momentum×0.3 + EarningsYield×0.3
+  // Growth   = EPSGrowth×0.5 + ROE×0.3 + DivYield×0.2
+  // Liquidity= Volume×0.5 + MarketCap×0.3 + DivYield×0.2
+  // Confidence= Momentum×0.4 + ROE×0.3 + CreditRating×0.3
+  const retorno        = Math.round(masa * 0.90);   // Return proxy
+  const crecimiento    = Math.round(masa * 0.85);   // Growth proxy
+  const liquidezActivo = Math.round(masa * 1.05);   // Liquidity proxy
+  const confianza      = 4 * masa - retorno - crecimiento - liquidezActivo; // Confidence
 
-  // Distancia: r = vol + spread + (1-ρ)*100 (raw, then normalized)
+  // DISTANCIA: r = Volatilidad + Spread + (1-ρ)×30
+  // Volatilidad = VIX×annualRange + HistVol + MOVE
+  // Spread      = HYGstress×regimeMult + CDSproxy + CPI×0.5 + Rates + PoliticalRisk
   const correlacion = parseFloat(Math.max(0.20, Math.min(0.95, 1 - distancia / 160)).toFixed(2));
   const volatilidad = Math.round(distancia * 0.85);
   const spread      = Math.round(distancia * 0.65);
-  const rawSum      = parseFloat((volatilidad + spread + (1 - correlacion) * 100).toFixed(1));
+  const rawSum      = parseFloat((volatilidad + spread + (1 - correlacion) * 30).toFixed(1));
 
-  // Fricción: F = (bidAsk + restric + (100-profund)) / 3 = 10 always
-  // profundidad varies with masa (more liquid sectors have deeper books)
+  // FRICCION: F = BidAsk + TxCost + CapCtrl + Slippage - LiqBonus
   const profundidad   = Math.round(Math.min(92, Math.max(75, masa * 0.15 + 75)));
-  const remainder     = profundidad - 70; // bidAsk + restric = profundidad - 70
+  const remainder     = profundidad - 70;
   const bidAskSpread  = Math.max(1, Math.round(remainder * 0.55));
   const restricciones = Math.max(1, remainder - bidAskSpread);
-  // F = (bidAsk + restric + (100-profund)) / 3 = (remainder + 100-profund) / 3 = 30/3 = 10 ✓
 
   return {
     masaComponents:      { retorno, crecimiento, liquidezActivo, confianza },
@@ -452,13 +455,13 @@ export default function App() {
                           </button>
                           {expandedSectorField?.sectorId === selectedSectorId && expandedSectorField.field === 'masa' && (
                             <div className="bg-ink/5 rounded p-2 mb-1 space-y-1.5">
-                              <p className="text-[7px] font-mono text-ink/30 italic">M = 0.25×Ret + 0.25×Crec + 0.25×Liq + 0.25×Conf</p>
+                              <p className="text-[7px] font-mono text-ink/30 italic">M = w1×Return + w2×Growth + w3×Liquidity + w4×Confidence</p>
                               <div className="grid grid-cols-2 gap-1">
                                 {([
-                                  { label: 'Retorno (0.25)', val: comps.masaComponents.retorno, color: 'bg-accent' },
-                                  { label: 'Crecim. (0.25)', val: comps.masaComponents.crecimiento, color: 'bg-accent/70' },
-                                  { label: 'Liquidez (0.25)', val: comps.masaComponents.liquidezActivo, color: 'bg-accent/50' },
-                                  { label: 'Confianza (0.25)', val: comps.masaComponents.confianza, color: 'bg-accent/30' },
+                                  { label: 'Return (52s+E/P+Mom)', val: comps.masaComponents.retorno, color: 'bg-accent' },
+                                  { label: 'Growth (EPS+ROE+Div)', val: comps.masaComponents.crecimiento, color: 'bg-accent/70' },
+                                  { label: 'Liquidity (Vol+Cap+Div)', val: comps.masaComponents.liquidezActivo, color: 'bg-accent/50' },
+                                  { label: 'Confidence (Mom+ROE+Rating)', val: comps.masaComponents.confianza, color: 'bg-accent/30' },
                                 ] as const).map(item => (
                                   <div key={item.label} className="space-y-0.5">
                                     <div className="flex justify-between text-[7px] font-mono">
@@ -486,12 +489,12 @@ export default function App() {
                           </button>
                           {expandedSectorField?.sectorId === selectedSectorId && expandedSectorField.field === 'distancia' && (
                             <div className="bg-ink/5 rounded p-2 mb-1 space-y-1.5">
-                              <p className="text-[7px] font-mono text-ink/30 italic">r = Vol + Spread + (1-ρ)×100</p>
+                              <p className="text-[7px] font-mono text-ink/30 italic">r = Volat.(VIX+MOVE+Hist) + Spread(HYG+CDS+CPI+Rates+PolRisk) + (1-ρ)×30</p>
                               <div className="grid grid-cols-3 gap-1">
                                 {([
-                                  { label: 'Volatil.', val: comps.distanciaComponents.volatilidad, color: 'bg-danger/80' },
-                                  { label: 'Spread',   val: comps.distanciaComponents.spread,      color: 'bg-danger/60' },
-                                  { label: '1-Corr',   val: Math.round((1 - comps.distanciaComponents.correlacion) * 100), color: 'bg-danger/40' },
+                                  { label: 'Volat.VIX+MOVE', val: comps.distanciaComponents.volatilidad, color: 'bg-danger/80' },
+                                  { label: 'Spread HYG+Risk', val: comps.distanciaComponents.spread,      color: 'bg-danger/60' },
+                                  { label: '(1-ρ)×30',        val: Math.round((1 - comps.distanciaComponents.correlacion) * 30), color: 'bg-danger/40' },
                                 ] as const).map(item => (
                                   <div key={item.label} className="space-y-0.5">
                                     <div className="flex justify-between text-[7px] font-mono">
@@ -519,12 +522,12 @@ export default function App() {
                           </button>
                           {expandedSectorField?.sectorId === selectedSectorId && expandedSectorField.field === 'friccion' && (
                             <div className="bg-ink/5 rounded p-2 mb-1 space-y-1.5">
-                              <p className="text-[7px] font-mono text-ink/30 italic">F = (Bid-Ask + Restric + (100-Profund)) / 3</p>
+                              <p className="text-[7px] font-mono text-ink/30 italic">F = BidAsk + TxCost + CapCtrl + Slippage - LiqBonus</p>
                               <div className="grid grid-cols-3 gap-1">
                                 {([
-                                  { label: 'Bid-Ask',  val: comps.friccionComponents.bidAskSpread, color: 'bg-ink/30' },
-                                  { label: 'Restric.', val: comps.friccionComponents.restricciones, color: 'bg-ink/20' },
-                                  { label: 'Profund.', val: comps.friccionComponents.profundidad,   color: 'bg-accent/20' },
+                                  { label: 'Bid-Ask (ask-bid/P)', val: comps.friccionComponents.bidAskSpread, color: 'bg-ink/30' },
+                                  { label: 'TxCost+CapCtrl',      val: comps.friccionComponents.restricciones, color: 'bg-ink/20' },
+                                  { label: 'Slippage(MktCap)',    val: comps.friccionComponents.profundidad,   color: 'bg-accent/20' },
                                 ] as const).map(item => (
                                   <div key={item.label} className="space-y-0.5">
                                     <div className="flex justify-between text-[7px] font-mono">
@@ -657,14 +660,14 @@ export default function App() {
                               {mc && mw ? (
                                 <>
                                   <p className="text-[7px] font-mono text-ink/30 italic leading-none">
-                                    M = {mw.w1}×Ret + {mw.w2}×Crec + {mw.w3}×Liq + {mw.w4}×Conf
+                                    M = {mw.w1}×Return + {mw.w2}×Growth + {mw.w3}×Liquidity + {mw.w4}×Confidence
                                   </p>
                                   <div className="grid grid-cols-2 gap-1">
                                     {([
-                                      { label: `Retorno (${mw.w1})`, val: mc.retorno, color: 'bg-accent' },
-                                      { label: `Crecim. (${mw.w2})`, val: mc.crecimiento, color: 'bg-accent/70' },
-                                      { label: `Liquidez (${mw.w3})`, val: mc.liquidezActivo, color: 'bg-accent/50' },
-                                      { label: `Confianza (${mw.w4})`, val: mc.confianza, color: 'bg-accent/30' },
+                                      { label: `Return (${mw.w1}) E/P+Mom`, val: mc.retorno, color: 'bg-accent' },
+                                      { label: `Growth (${mw.w2}) EPS+ROE`, val: mc.crecimiento, color: 'bg-accent/70' },
+                                      { label: `Liquidity (${mw.w3}) Vol+Cap`, val: mc.liquidezActivo, color: 'bg-accent/50' },
+                                      { label: `Confidence (${mw.w4}) Mom+Rtg`, val: mc.confianza, color: 'bg-accent/30' },
                                     ] as const).map(item => (
                                       <div key={item.label} className="space-y-0.5">
                                         <div className="flex justify-between text-[7px] font-mono">
@@ -697,13 +700,13 @@ export default function App() {
                               {dc ? (
                                 <>
                                   <p className="text-[7px] font-mono text-ink/30 italic leading-none">
-                                    r = Vol({dc.volatilidad}) + Spread({dc.spread}) + (1-ρ={dc.correlacion.toFixed(2)})
+                                    r = Volat.(VIX+MOVE+Hist) + Spread(HYG+CDS+CPI+Rates+PolRisk) + (1-ρ)×30
                                   </p>
                                   <div className="grid grid-cols-3 gap-1">
                                     {([
-                                      { label: 'Volatil.', val: dc.volatilidad, color: 'bg-danger/80' },
-                                      { label: 'Spread', val: dc.spread, color: 'bg-danger/60' },
-                                      { label: '1-Corr', val: Math.round((1 - dc.correlacion) * 100), color: 'bg-danger/40' },
+                                      { label: 'Volat.VIX+MOVE', val: dc.volatilidad, color: 'bg-danger/80' },
+                                      { label: 'Spread HYG+Risk', val: dc.spread, color: 'bg-danger/60' },
+                                      { label: '(1-ρ)×30', val: Math.round((1 - dc.correlacion) * 30), color: 'bg-danger/40' },
                                     ] as const).map(item => (
                                       <div key={item.label} className="space-y-0.5">
                                         <div className="flex justify-between text-[7px] font-mono">
@@ -736,9 +739,9 @@ export default function App() {
                               {fc ? (
                                 <div className="grid grid-cols-3 gap-1">
                                   {([
-                                    { label: 'Bid-Ask', val: fc.bidAskSpread, color: 'bg-ink/30' },
-                                    { label: 'Restric.', val: fc.restricciones, color: 'bg-ink/20' },
-                                    { label: 'Profund.', val: fc.profundidad, color: 'bg-accent/20' },
+                                    { label: 'Bid-Ask (ask-bid/P)', val: fc.bidAskSpread, color: 'bg-ink/30' },
+                                    { label: 'TxCost+CapCtrl', val: fc.restricciones, color: 'bg-ink/20' },
+                                    { label: 'Slippage(MktCap)', val: fc.profundidad, color: 'bg-accent/20' },
                                   ] as const).map(item => (
                                     <div key={item.label} className="space-y-0.5">
                                       <div className="flex justify-between text-[7px] font-mono">
