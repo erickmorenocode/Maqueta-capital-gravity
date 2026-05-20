@@ -415,25 +415,31 @@ function computeCountrySectorNodes(
   );
   const countryFricBase = clamp(capControl * 0.5 + txCost * 20 + (countryQuote ? 1 : 5), 1, 20) * macro.regimeMult;
 
+  const countryRisk = countryVolatility * 0.4 + (100 - creditRating) * 0.3 + (100 - politicalStab) * 0.2 + cpi * 0.5;
+
   const rawNodes = globalNodes.map(node => {
     const domFactor = profile ? (profile[node.id] ?? 50) / 100 : 0.5;
 
-    // MASA: global sector × (1 - domFactor blend) + country signal × domFactor
+    // MASA: global × reduced weight + country signal × domFactor + dominance structural bonus
+    // domMasaBonus: dominant sectors (dom→1) get +10, non-dominant (dom→0) get -10
     const countryMasaSignal =
       countryReturn      * 0.20 +
       countryMomentum    * 0.15 +
       countryDailyReturn * 0.30 +
       countryConfidence  * 0.20 +
       countryDivYield    * 0.15;
+    const domMasaBonus = (domFactor - 0.5) * 20;
     const masa = Math.round(clamp(
-      node.masa * (1 - domFactor * 0.45) + countryMasaSignal * domFactor * 0.45,
+      node.masa * (1 - domFactor * 0.55) + countryMasaSignal * domFactor * 0.55 + domMasaBonus,
       5, 100
     ));
 
-    // DISTANCIA: global base + country risk overlay
-    const countryRisk = countryVolatility * 0.4 + (100 - creditRating) * 0.3 + (100 - politicalStab) * 0.2 + cpi * 0.5;
+    // DISTANCIA: global base + country risk + dominance penalty
+    // Non-dominant sectors (dom→0) get up to +28 pts extra distancia (less accessible locally)
+    // Dominant sectors (dom→1) get near-zero penalty — they ARE the local market
+    const domDistanciaAdj = (1 - domFactor) * 28;
     const distancia = Math.round(clamp(
-      node.distancia * 0.55 + countryRisk * 0.45,
+      node.distancia * 0.50 + countryRisk * 0.35 + domDistanciaAdj,
       10, 90
     ));
 
