@@ -151,7 +151,14 @@ function computeFlows(nodes: SectorNode[], topN = 6): SectorFlow[] {
     }
   }
   candidates.sort((a, b) => b.score - a.score);
-  const top = candidates.slice(0, topN);
+  const usedTargets = new Set<string>();
+  const top: typeof candidates = [];
+  for (const c of candidates) {
+    if (usedTargets.has(c.to)) continue;
+    usedTargets.add(c.to);
+    top.push(c);
+    if (top.length >= topN) break;
+  }
   const maxScore = top[0]?.score ?? 1;
   return top.map(f => ({
     from: f.from,

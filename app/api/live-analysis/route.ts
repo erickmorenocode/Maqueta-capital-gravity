@@ -463,10 +463,17 @@ function computeSectorFlowsCalibrated(
   }
 
   pairs.sort((a, b) => b.score - a.score);
-  const top = pairs.slice(0, topN);
-  if (top.length === 0) return [];
-  const maxScore = top[0].score;
-  return top.map(({ from, to, score }) => ({
+  const usedTargets = new Set<string>();
+  const selected: typeof pairs = [];
+  for (const pair of pairs) {
+    if (usedTargets.has(pair.to)) continue;
+    usedTargets.add(pair.to);
+    selected.push(pair);
+    if (selected.length >= topN) break;
+  }
+  if (selected.length === 0) return [];
+  const maxScore = selected[0].score;
+  return selected.map(({ from, to, score }) => ({
     from, to, strength: parseFloat((score / maxScore).toFixed(3)),
   }));
 }
