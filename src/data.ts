@@ -244,5 +244,5 @@ export const GEO_POINTS: GeoPoint[] = [
   { id: 'Bonds', name: 'BONOS', coordinates: [-77, 38], type: 'asset' },
   { id: 'Crypto', name: 'CRYPTO', coordinates: [-40, 40], type: 'asset' },
   { id: 'Oil', name: 'PETRÓLEO', coordinates: [45, 25], type: 'asset' },
-  { id: 'Asia', name: 'ASIA', coordinates: [118, 32], type: 'country' },
+  { id: 'Asia', name: 'ASIA', coordinates: [118, 32], type: 'asset' },
 ];

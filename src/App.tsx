@@ -977,65 +977,56 @@ export default function App() {
               Centros de Gravedad de Activos
             </h2>
             <div className="space-y-3">
-              {GEO_POINTS.filter(p => p.type === 'asset').map((asset) => {
-                const metrics = activeScenario.metrics?.[asset.id];
-                const force = metrics ? (metrics.masa - metrics.distancia) / Math.max(1, metrics.friccion) : 0;
-                const isHigh = force > 8.0;
-                const isActive = isHigh; // Centros de gravedad son solo los altos
-                const isSelected = selectedPoint?.id === asset.id;
-                
-                let statusLabel = 'BAJA';
-                let barColor = 'bg-danger/60';
-                let barWidth = '15%';
-                
-                if (isHigh) {
-                  statusLabel = 'ALTA';
-                  barColor = 'bg-accent';
-                  barWidth = '90%';
-                } else if (force >= 2.0) {
-                  statusLabel = 'MEDIA';
-                  barColor = 'bg-ink/40';
-                  barWidth = '50%';
-                } else {
-                  statusLabel = 'BAJA';
-                  barColor = 'bg-danger/60';
-                  barWidth = '15%';
-                }
+              {(() => {
+                const assetPoints = GEO_POINTS.filter(p => p.type === 'asset');
+                const forces = assetPoints.map(p => {
+                  const m = activeScenario.metrics?.[p.id];
+                  return { id: p.id, force: m ? (m.masa - m.distancia) / Math.max(1, m.friccion) : 0 };
+                }).sort((a, b) => b.force - a.force);
+                const n = assetPoints.length;
+                const highCut = Math.ceil(n / 3);
+                const lowCut = Math.floor(n * 2 / 3);
+                const highIds = new Set(forces.slice(0, highCut).map(x => x.id));
+                const lowIds  = new Set(forces.slice(lowCut).map(x => x.id));
+                const getTier = (id: string) => highIds.has(id) ? 'high' : lowIds.has(id) ? 'low' : 'medium';
+                const TIER = {
+                  high:   { label: 'ALTA',  barColor: 'bg-green-500',  barWidth: '90%', textColor: 'text-green-400',  borderClass: 'bg-green-500/5 border-green-500/30',  dot: 'bg-green-500' },
+                  medium: { label: 'MEDIA', barColor: 'bg-slate-500',  barWidth: '50%', textColor: 'text-slate-400',  borderClass: 'bg-surface/20 border-slate-600/40',    dot: 'bg-slate-500' },
+                  low:    { label: 'BAJA',  barColor: 'bg-red-500/70', barWidth: '15%', textColor: 'text-red-400',    borderClass: 'bg-red-500/5 border-red-500/20',       dot: 'bg-red-500' },
+                };
+                return assetPoints.map((asset) => {
+                  const metrics = activeScenario.metrics?.[asset.id];
+                  const force = metrics ? (metrics.masa - metrics.distancia) / Math.max(1, metrics.friccion) : 0;
+                  const tier = getTier(asset.id);
+                  const t = TIER[tier];
+                  const isSelected = selectedPoint?.id === asset.id;
 
-                return (
-                  <button 
+                  return (
+                  <button
                     key={asset.id}
                     onClick={() => setSelectedPoint(asset)}
                     className={cn(
                       "w-full p-4 rounded-lg border transition-all duration-500 text-left group",
-                      isActive ? "bg-accent/5 border-accent/30" : "bg-surface/20 border-border opacity-50 hover:opacity-80",
-                      isSelected && "border-accent ring-1 ring-accent/50"
+                      t.borderClass,
+                      isSelected && "ring-1 ring-white/20"
                     )}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className={cn(
-                        "text-xs font-bold uppercase",
-                        isSelected ? "text-accent" : "text-ink/80"
-                      )}>{asset.name}</span>
-                      {isActive && <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />}
+                      <span className="text-xs font-bold uppercase text-ink/80">{asset.name}</span>
+                      {tier === 'high' && <div className={cn("w-2 h-2 rounded-full animate-pulse", t.dot)} />}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-1 bg-ink/5 rounded-full overflow-hidden">
-                        <motion.div 
+                        <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: barWidth }}
-                          className={cn("h-full", barColor)}
+                          animate={{ width: t.barWidth }}
+                          className={cn("h-full", t.barColor)}
                         />
                       </div>
-                      <span className={cn(
-                        "text-[10px] font-mono",
-                        statusLabel === 'ALTA' ? "text-accent" : statusLabel === 'MEDIA' ? "text-ink/60" : "text-danger"
-                      )}>
-                        {statusLabel}
-                      </span>
+                      <span className={cn("text-[10px] font-mono", t.textColor)}>{t.label}</span>
                     </div>
                     {isSelected && activeScenario.metrics?.[asset.id] && (
-                      <motion.div 
+                      <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         className="mt-3 pt-3 border-t border-ink/5 space-y-3"
@@ -1044,7 +1035,7 @@ export default function App() {
                           <div className="space-y-1">
                             <div className="flex justify-between text-[9px] font-mono">
                               <span className="text-ink/60">MASA</span>
-                              <span className="text-accent">{activeScenario.metrics[asset.id].masa}%</span>
+                              <span className={t.textColor}>{activeScenario.metrics[asset.id].masa}%</span>
                             </div>
                             {activeScenario.metrics[asset.id].masaJustificacion && (
                               <p className="text-[7px] font-mono text-ink/30 leading-tight italic">
@@ -1088,16 +1079,22 @@ export default function App() {
                           </p>
                         </div>
                         
-                        {isActive && (
-                          <p className="text-[8px] font-mono text-accent/60 italic leading-tight">
-                            * Punto de atracción activo por alta densidad de masa relativa.
+                        {tier === 'high' && (
+                          <p className={cn("text-[8px] font-mono italic leading-tight", t.textColor, "opacity-60")}>
+                            * Centro de gravedad activo — alta densidad de masa relativa.
+                          </p>
+                        )}
+                        {tier === 'low' && (
+                          <p className="text-[8px] font-mono text-red-400/60 italic leading-tight">
+                            * Capital en fuga — baja atracción gravitacional.
                           </p>
                         )}
                       </motion.div>
                     )}
                   </button>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
               </>
             )}
