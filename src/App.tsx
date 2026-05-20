@@ -304,59 +304,87 @@ export default function App() {
             </h2>
             <div className="space-y-4">
               <div className="space-y-2">
-                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Versión Teórica</span>
-                <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
-                  <p className="text-[10px] font-mono text-accent font-bold italic">
-                    Flujo ∝ (A₁ · A₂) / Riesgo²
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Versión Práctica</span>
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Fuerza Gravitacional</span>
                 <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
                   <p className="text-[10px] font-mono text-accent font-bold">
-                    Flujo ≈ (Retorno - Riesgo) / Fricción
+                    G = (M − d) / f
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-2 text-[9px] font-mono">
-                <div className="flex flex-col border-b border-ink/5 pb-1">
+
+              <div className="grid grid-cols-1 gap-3 text-[9px] font-mono">
+                {/* MASA */}
+                <div className="space-y-1 border-b border-ink/5 pb-2">
                   <div className="flex justify-between">
                     <span className="text-accent font-bold">MASA (M)</span>
-                    <span className="text-ink/80">Atractivo / Retorno</span>
+                    <span className="text-ink/50">Atractivo del activo [0–100]</span>
                   </div>
-                  <span className="text-[7px] text-ink/30 leading-tight">Yield, Crecimiento, Seguridad (Bonos), Estabilidad Accionaria.</span>
+                  <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                    M = w1×Return + w2×Growth + w3×Liquidity + w4×Confidence
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[7px] text-ink/30">
+                    <span>Return = PriceRet×0.20 + Mom×0.20</span>
+                    <span>+ DailyRet×0.30 + E/P×0.30</span>
+                    <span>Growth  = EPS×0.50 + ROE×0.30</span>
+                    <span>+ DivYield×0.20</span>
+                    <span>Liquid. = Vol×0.50 + MktCap×0.30</span>
+                    <span>+ DivYield×0.20</span>
+                    <span>Confid. = Mom×0.40 + ROE×0.30</span>
+                    <span>+ CreditRtg×0.30</span>
+                  </div>
                 </div>
-                <div className="flex flex-col border-b border-ink/5 pb-1">
+
+                {/* DISTANCIA */}
+                <div className="space-y-1 border-b border-ink/5 pb-2">
                   <div className="flex justify-between">
                     <span className="text-danger font-bold">DISTANCIA (d)</span>
-                    <span className="text-ink/80">Riesgo / Espacio</span>
+                    <span className="text-ink/50">Riesgo / Barreras [0–100]</span>
                   </div>
-                  <span className="text-[7px] text-ink/30 leading-tight">Volatilidad, Riesgo País, Incertidumbre Macro, Geopolítica.</span>
+                  <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                    d = Volat. + Spread + (1−ρ)×30
+                  </p>
+                  <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                    <span>Volat.  = VIX×rango52s + HistVol + MOVE</span>
+                    <span>Spread = HYGstress + CDSproxy + CPI×0.5</span>
+                    <span>        + Rates + PoliticalRisk</span>
+                    <span>ρ = correlación con activo de referencia</span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
+
+                {/* FRICCIÓN */}
+                <div className="space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-ink/60 font-bold">FRICCIÓN (f)</span>
-                    <span className="text-ink/80">Liquidez / Costos</span>
+                    <span className="text-slate-400 font-bold">FRICCIÓN (f)</span>
+                    <span className="text-ink/50">Costos / Liquidez [1–100]</span>
                   </div>
-                  <span className="text-[7px] text-ink/30 leading-tight">Facilidad Entrada/Salida, Controles de Capital, Costos Operativos.</span>
+                  <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                    f = BidAsk + TxCost + CapCtrl + Slippage
+                  </p>
+                  <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                    <span>BidAsk   = (ask−bid) / P</span>
+                    <span>TxCost+CapCtrl = costos regulatorios</span>
+                    <span>Slippage = 1 / MktCap (profundidad)</span>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-2 pt-2 border-t border-ink/5">
-                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Rangos de Fuerza G</span>
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Clasificación de Fuerza G</span>
+                <p className="text-[7px] font-mono text-ink/25 italic leading-tight">
+                  Ranking relativo por escenario — top ⅓ / medio ⅓ / bajo ⅓
+                </p>
                 <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
-                  <div className="p-1 rounded bg-accent/10 border border-accent/20 text-center">
-                    <div className="text-accent font-bold uppercase">Alta</div>
-                    <div className="text-ink/40">&gt; 8.0</div>
+                  <div className="p-1 rounded bg-green-500/10 border border-green-500/30 text-center">
+                    <div className="text-green-400 font-bold uppercase">Alta</div>
+                    <div className="text-ink/40">top ⅓</div>
                   </div>
-                  <div className="p-1 rounded bg-ink/5 border border-ink/10 text-center">
-                    <div className="text-ink/80 font-bold uppercase">Media</div>
-                    <div className="text-ink/40">2.0 - 8.0</div>
+                  <div className="p-1 rounded bg-slate-600/20 border border-slate-600/30 text-center">
+                    <div className="text-slate-400 font-bold uppercase">Media</div>
+                    <div className="text-ink/40">medio ⅓</div>
                   </div>
-                  <div className="p-1 rounded bg-danger/10 border border-danger/20 text-center">
-                    <div className="text-danger font-bold uppercase">Baja</div>
-                    <div className="text-ink/40">&lt; 2.0</div>
+                  <div className="p-1 rounded bg-red-500/10 border border-red-500/20 text-center">
+                    <div className="text-red-400 font-bold uppercase">Baja</div>
+                    <div className="text-ink/40">bajo ⅓</div>
                   </div>
                 </div>
               </div>
