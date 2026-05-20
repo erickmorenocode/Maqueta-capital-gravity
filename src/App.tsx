@@ -368,40 +368,76 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-ink/5">
+              <div className="space-y-3 pt-2 border-t border-ink/5">
                 <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Clasificación de Fuerza G</span>
                 <p className="text-[7px] font-mono text-ink/25 italic leading-tight">
-                  Ranking relativo — umbrales calculados del escenario activo
+                  Umbral = media ± 0.5σ del escenario activo
                 </p>
                 {(() => {
-                  const forces = Object.values(activeScenario.metrics ?? {})
-                    .map(m => (m.masa - m.distancia) / Math.max(1, m.friccion))
-                    .sort((a, b) => b - a);
-                  const n = forces.length;
-                  if (n === 0) return null;
-                  const mean    = forces.reduce((a, b) => a + b, 0) / n;
-                  const sigma   = Math.sqrt(forces.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
-                  const highMin = mean + 0.5 * sigma;
-                  const lowMax  = mean - 0.5 * sigma;
-                  const cntHigh = forces.filter(f => f >= highMin).length;
-                  const cntLow  = forces.filter(f => f <= lowMax).length;
-                  const cntMid  = n - cntHigh - cntLow;
+                  const metricVals = Object.values(activeScenario.metrics ?? {});
+                  if (metricVals.length === 0) return null;
+
+                  // Activos: G = (M−d)/f
+                  const aForces = metricVals.map(m => (m.masa - m.distancia) / Math.max(1, m.friccion));
+                  const aMean   = aForces.reduce((a, b) => a + b, 0) / aForces.length;
+                  const aSigma  = Math.sqrt(aForces.reduce((a, b) => a + (b - aMean) ** 2, 0) / aForces.length);
+                  const aHigh   = aMean + 0.5 * aSigma;
+                  const aLow    = aMean - 0.5 * aSigma;
+
+                  // Sectores: G = M−d (sin friccion en nodo sectorial)
+                  const sForces = metricVals.map(m => m.masa - m.distancia);
+                  const sMean   = sForces.reduce((a, b) => a + b, 0) / sForces.length;
+                  const sSigma  = Math.sqrt(sForces.reduce((a, b) => a + (b - sMean) ** 2, 0) / sForces.length);
+                  const sHigh   = sMean + 0.5 * sSigma;
+                  const sLow    = sMean - 0.5 * sSigma;
+
+                  const TierRow = ({ label, high, low, color }: { label: string; high: number; low: number; color: string }) => (
+                    <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
+                      <div className={`p-1 rounded text-center border ${color === 'green' ? 'bg-green-500/10 border-green-500/30' : color === 'slate' ? 'bg-slate-600/20 border-slate-600/30' : 'bg-red-500/10 border-red-500/20'}`}>
+                        <span className={color === 'green' ? 'text-green-400' : color === 'slate' ? 'text-slate-400' : 'text-red-400'}>
+                          {label === 'Alta' ? `≥ ${high.toFixed(1)}` : label === 'Baja' ? `≤ ${low.toFixed(1)}` : `${low.toFixed(1)}–${high.toFixed(1)}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+
                   return (
-                    <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
-                      <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
-                        <div className="text-green-400 font-bold uppercase">Alta</div>
-                        <div className="text-green-400/70 text-[7px]">≥ {highMin.toFixed(1)}</div>
-                        <div className="text-ink/30 text-[6px]">{cntHigh} activo{cntHigh !== 1 ? 's' : ''}</div>
+                    <div className="space-y-2">
+                      {/* Activos del mundo */}
+                      <div className="space-y-1">
+                        <span className="text-[7px] font-mono text-ink/30 uppercase tracking-wider block">Activos — G=(M−d)/f</span>
+                        <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
+                          <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
+                            <div className="text-green-400 font-bold">Alta</div>
+                            <div className="text-green-400/70">≥ {aHigh.toFixed(2)}</div>
+                          </div>
+                          <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
+                            <div className="text-slate-400 font-bold">Media</div>
+                            <div className="text-slate-400/70">{aLow.toFixed(2)}–{aHigh.toFixed(2)}</div>
+                          </div>
+                          <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
+                            <div className="text-red-400 font-bold">Baja</div>
+                            <div className="text-red-400/70">≤ {aLow.toFixed(2)}</div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
-                        <div className="text-slate-400 font-bold uppercase">Media</div>
-                        <div className="text-slate-400/70 text-[7px]">{lowMax.toFixed(1)}–{highMin.toFixed(1)}</div>
-                        <div className="text-ink/30 text-[6px]">{cntMid} activo{cntMid !== 1 ? 's' : ''}</div>
-                      </div>
-                      <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
-                        <div className="text-red-400 font-bold uppercase">Baja</div>
-                        <div className="text-red-400/70 text-[7px]">&lt; {lowMax.toFixed(1)}</div>
-                        <div className="text-ink/30 text-[6px]">{cntLow} activo{cntLow !== 1 ? 's' : ''}</div>
+                      {/* Sectores */}
+                      <div className="space-y-1">
+                        <span className="text-[7px] font-mono text-ink/30 uppercase tracking-wider block">Sectores — G=M−d</span>
+                        <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
+                          <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
+                            <div className="text-green-400 font-bold">Alta</div>
+                            <div className="text-green-400/70">≥ {sHigh.toFixed(1)}</div>
+                          </div>
+                          <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
+                            <div className="text-slate-400 font-bold">Media</div>
+                            <div className="text-slate-400/70">{sLow.toFixed(1)}–{sHigh.toFixed(1)}</div>
+                          </div>
+                          <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
+                            <div className="text-red-400 font-bold">Baja</div>
+                            <div className="text-red-400/70">≤ {sLow.toFixed(1)}</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
