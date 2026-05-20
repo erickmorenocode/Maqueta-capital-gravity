@@ -403,27 +403,9 @@ export default function App() {
 
                   return (
                     <div className="space-y-2">
-                      {/* Activos del mundo */}
+                      {/* Activos del mundo — G = M−d (escala absoluta) */}
                       <div className="space-y-1">
-                        <span className="text-[7px] font-mono text-ink/30 uppercase tracking-wider block">Activos — G=(M−d)/f</span>
-                        <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
-                          <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
-                            <div className="text-green-400 font-bold">Alta</div>
-                            <div className="text-green-400/70">≥ {aHigh.toFixed(2)}</div>
-                          </div>
-                          <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
-                            <div className="text-slate-400 font-bold">Media</div>
-                            <div className="text-slate-400/70">{aLow.toFixed(2)}–{aHigh.toFixed(2)}</div>
-                          </div>
-                          <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
-                            <div className="text-red-400 font-bold">Baja</div>
-                            <div className="text-red-400/70">≤ {aLow.toFixed(2)}</div>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Sectores */}
-                      <div className="space-y-1">
-                        <span className="text-[7px] font-mono text-ink/30 uppercase tracking-wider block">Sectores — G=M−d</span>
+                        <span className="text-[7px] font-mono text-ink/30 uppercase tracking-wider block">Activos — G=M−d</span>
                         <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
                           <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
                             <div className="text-green-400 font-bold">Alta</div>
@@ -436,6 +418,24 @@ export default function App() {
                           <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
                             <div className="text-red-400 font-bold">Baja</div>
                             <div className="text-red-400/70">≤ {sLow.toFixed(1)}</div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Sectores — G = (M−d)/f (normalizado por friccion) */}
+                      <div className="space-y-1">
+                        <span className="text-[7px] font-mono text-ink/30 uppercase tracking-wider block">Sectores — G=(M−d)/f</span>
+                        <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
+                          <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
+                            <div className="text-green-400 font-bold">Alta</div>
+                            <div className="text-green-400/70">≥ {aHigh.toFixed(2)}</div>
+                          </div>
+                          <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
+                            <div className="text-slate-400 font-bold">Media</div>
+                            <div className="text-slate-400/70">{aLow.toFixed(2)}–{aHigh.toFixed(2)}</div>
+                          </div>
+                          <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
+                            <div className="text-red-400 font-bold">Baja</div>
+                            <div className="text-red-400/70">≤ {aLow.toFixed(2)}</div>
                           </div>
                         </div>
                       </div>
