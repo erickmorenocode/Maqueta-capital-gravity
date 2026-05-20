@@ -173,13 +173,15 @@ function applyCountryProfile(
 ): SectorNode[] {
   const profile = G8_COUNTRY_SECTOR_PROFILES[countryName];
   if (!profile) return nodes;
-  const FRICCION = 10;
-  return nodes.map(node => {
+  const adjusted = nodes.map(node => {
     const dominance = profile[node.id] ?? 50;
     const masa = Math.round(Math.max(5, Math.min(100, node.masa * 0.5 + dominance * 0.5)));
     const distancia = Math.round(Math.max(10, Math.min(90, node.distancia * (1 - (dominance - 50) / 250))));
-    return { ...node, masa, distancia, isGravityCenter: (masa - distancia) / FRICCION > 3.0 };
+    return { ...node, masa, distancia };
   });
+  const ranked = [...adjusted].sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia));
+  const topIds = new Set(ranked.slice(0, 3).map(n => n.id));
+  return adjusted.map(n => ({ ...n, isGravityCenter: topIds.has(n.id) }));
 }
 
 export function getSectorData(

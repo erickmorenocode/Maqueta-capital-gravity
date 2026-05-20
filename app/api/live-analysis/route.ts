@@ -415,7 +415,7 @@ function computeCountrySectorNodes(
   );
   const countryFricBase = clamp(capControl * 0.5 + txCost * 20 + (countryQuote ? 1 : 5), 1, 20) * macro.regimeMult;
 
-  return globalNodes.map(node => {
+  const rawNodes = globalNodes.map(node => {
     const domFactor = profile ? (profile[node.id] ?? 50) / 100 : 0.5;
 
     // MASA: global sector × (1 - domFactor blend) + country signal × domFactor
@@ -440,8 +440,13 @@ function computeCountrySectorNodes(
     // FRICCION: global base + country-specific friction
     const friccion = Math.round(clamp(node.friccionRaw * 0.5 + countryFricBase * 0.5, 1, 30));
 
-    return { id: node.id, masa, distancia, isGravityCenter: (masa - distancia) / Math.max(1, friccion) > 3.0 };
+    return { id: node.id, masa, distancia, friccion };
   });
+
+  // Top-3 by net gravity force become gravity centers
+  const ranked = [...rawNodes].sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia));
+  const topIds = new Set(ranked.slice(0, 3).map(n => n.id));
+  return rawNodes.map(n => ({ id: n.id, masa: n.masa, distancia: n.distancia, isGravityCenter: topIds.has(n.id) }));
 }
 
 // ─── Sector flows with Z-score calibration ────────────────────────────────────
@@ -627,11 +632,11 @@ export async function GET() {
       friccionRaw: clamp(raw.friccionRaw, 1, 30),
     }));
 
-    // sectorData = EE.UU. perspective
-    const usSectorNodes = globalNodes.map(({ id, masa, distancia, friccionRaw }) => ({
-      id, masa, distancia,
-      isGravityCenter: (masa - distancia) / Math.max(1, friccionRaw) > 3.0,
-    }));
+    // sectorData = EE.UU. perspective — top-3 by net force become gravity centers
+    const usSectorRaw = globalNodes.map(({ id, masa, distancia }) => ({ id, masa, distancia }));
+    const usRanked    = [...usSectorRaw].sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia));
+    const usTopIds    = new Set(usRanked.slice(0, 3).map(n => n.id));
+    const usSectorNodes = usSectorRaw.map(n => ({ ...n, isGravityCenter: usTopIds.has(n.id) }));
     const usSectorFlows = computeSectorFlowsCalibrated(usSectorNodes, zscoreFlows);
 
     // ── Per-country sector data ────────────────────────────────────────────────
