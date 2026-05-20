@@ -417,29 +417,35 @@ function computeCountrySectorNodes(
 
   const countryRisk = countryVolatility * 0.4 + (100 - creditRating) * 0.3 + (100 - politicalStab) * 0.2 + cpi * 0.5;
 
+  // Country ETF composite signal (same for all sectors in this country)
+  const countryMasaSignal =
+    countryReturn      * 0.20 +
+    countryMomentum    * 0.15 +
+    countryDailyReturn * 0.30 +
+    countryConfidence  * 0.20 +
+    countryDivYield    * 0.15;
+
   const rawNodes = globalNodes.map(node => {
     const domFactor = profile ? (profile[node.id] ?? 50) / 100 : 0.5;
 
-    // MASA: global × reduced weight + country signal × domFactor + dominance structural bonus
-    // domMasaBonus: dominant sectors (dom→1) get +10, non-dominant (dom→0) get -10
-    const countryMasaSignal =
-      countryReturn      * 0.20 +
-      countryMomentum    * 0.15 +
-      countryDailyReturn * 0.30 +
-      countryConfidence  * 0.20 +
-      countryDivYield    * 0.15;
-    const domMasaBonus = (domFactor - 0.5) * 20;
+    // Sector-specific country signal: dominant sectors get full country signal,
+    // non-dominant sectors are pulled toward a neutral floor (30) — they barely
+    // exist in the local economy so the country ETF move barely affects them.
+    const sectorCountrySignal = countryMasaSignal * domFactor + 30 * (1 - domFactor);
+
+    // MASA: strong country blend (70%) + structural dominance bonus (±20pts)
+    // domMasaBonus: dom=0.98 → +19.2, dom=0.50 → 0, dom=0.30 → -8
+    const domMasaBonus = (domFactor - 0.5) * 40;
     const masa = Math.round(clamp(
-      node.masa * (1 - domFactor * 0.55) + countryMasaSignal * domFactor * 0.55 + domMasaBonus,
+      node.masa * (1 - domFactor * 0.70) + sectorCountrySignal * domFactor * 0.70 + domMasaBonus,
       5, 100
     ));
 
-    // DISTANCIA: global base + country risk + dominance penalty
-    // Non-dominant sectors (dom→0) get up to +28 pts extra distancia (less accessible locally)
-    // Dominant sectors (dom→1) get near-zero penalty — they ARE the local market
-    const domDistanciaAdj = (1 - domFactor) * 28;
+    // DISTANCIA: non-dominant sectors get heavy distance penalty (up to +50 pts)
+    // Dom=0.98 → penalty=1, dom=0.50 → penalty=25, dom=0.30 → penalty=35
+    const domDistanciaAdj = (1 - domFactor) * 50;
     const distancia = Math.round(clamp(
-      node.distancia * 0.50 + countryRisk * 0.35 + domDistanciaAdj,
+      node.distancia * 0.40 + countryRisk * 0.30 + domDistanciaAdj,
       10, 90
     ));
 
