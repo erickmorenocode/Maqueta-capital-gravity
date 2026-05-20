@@ -379,13 +379,13 @@ export default function App() {
                     .sort((a, b) => b - a);
                   const n = forces.length;
                   if (n === 0) return null;
-                  const highCut  = Math.ceil(n / 3);
-                  const lowCut   = Math.floor(n * 2 / 3);
-                  const highMin  = forces[highCut - 1] ?? 0;
-                  const lowMax   = forces[lowCut]      ?? 0;
-                  const cntHigh  = highCut;
-                  const cntLow   = n - lowCut;
-                  const cntMid   = n - cntHigh - cntLow;
+                  const mean    = forces.reduce((a, b) => a + b, 0) / n;
+                  const sigma   = Math.sqrt(forces.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+                  const highMin = mean + 0.5 * sigma;
+                  const lowMax  = mean - 0.5 * sigma;
+                  const cntHigh = forces.filter(f => f >= highMin).length;
+                  const cntLow  = forces.filter(f => f <= lowMax).length;
+                  const cntMid  = n - cntHigh - cntLow;
                   return (
                     <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
                       <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
@@ -1031,11 +1031,15 @@ export default function App() {
                   return { id: p.id, force: m ? (m.masa - m.distancia) / Math.max(1, m.friccion) : 0 };
                 }).sort((a, b) => b.force - a.force);
                 const n = assetPoints.length;
-                const highCut = Math.ceil(n / 3);
-                const lowCut = Math.floor(n * 2 / 3);
-                const highIds = new Set(forces.slice(0, highCut).map(x => x.id));
-                const lowIds  = new Set(forces.slice(lowCut).map(x => x.id));
-                const getTier = (id: string) => highIds.has(id) ? 'high' : lowIds.has(id) ? 'low' : 'medium';
+                const rawF   = forces.map(x => x.force);
+                const rMean  = rawF.reduce((a, b) => a + b, 0) / rawF.length;
+                const rSigma = Math.sqrt(rawF.reduce((a, b) => a + (b - rMean) ** 2, 0) / rawF.length);
+                const rHighT = rMean + 0.5 * rSigma;
+                const rLowT  = rMean - 0.5 * rSigma;
+                const getTier = (id: string) => {
+                  const f = forces.find(x => x.id === id)?.force ?? 0;
+                  return f >= rHighT ? 'high' : f <= rLowT ? 'low' : 'medium';
+                };
                 const TIER = {
                   high:   { label: 'ALTA',  barColor: 'bg-green-500',  barWidth: '90%', textColor: 'text-green-400',  borderClass: 'bg-green-500/5 border-green-500/30',  dot: 'bg-green-500' },
                   medium: { label: 'MEDIA', barColor: 'bg-slate-500',  barWidth: '50%', textColor: 'text-slate-400',  borderClass: 'bg-surface/20 border-slate-600/40',    dot: 'bg-slate-500' },

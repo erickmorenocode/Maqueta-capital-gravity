@@ -179,9 +179,11 @@ function applyCountryProfile(
     const distancia = Math.round(Math.max(10, Math.min(90, node.distancia * (1 - (dominance - 50) / 250))));
     return { ...node, masa, distancia };
   });
-  const ranked = [...adjusted].sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia));
-  const topIds = new Set(ranked.slice(0, 3).map(n => n.id));
-  return adjusted.map(n => ({ ...n, isGravityCenter: topIds.has(n.id) }));
+  const apF     = adjusted.map(n => n.masa - n.distancia);
+  const apMean  = apF.reduce((a, b) => a + b, 0) / apF.length;
+  const apSigma = Math.sqrt(apF.reduce((a, b) => a + (b - apMean) ** 2, 0) / apF.length);
+  const apHighT = apMean + 0.5 * apSigma;
+  return adjusted.map(n => ({ ...n, isGravityCenter: (n.masa - n.distancia) >= apHighT }));
 }
 
 export function getSectorData(
@@ -283,11 +285,15 @@ export function getSectorData(
 
   const metrics = metricsMap[effectiveId] ?? fallback;
 
-  const baseNodes: SectorNode[] = SECTORS.map(s => {
+  const baseRaw = SECTORS.map(s => {
     const m = metrics[s.id] ?? { masa: 50, distancia: 50 };
-    const force = (m.masa - m.distancia) / FRICCION;
-    return { id: s.id, masa: m.masa, distancia: m.distancia, isGravityCenter: force > 3.0 };
+    return { id: s.id, masa: m.masa, distancia: m.distancia };
   });
+  const brF     = baseRaw.map(n => n.masa - n.distancia);
+  const brMean  = brF.reduce((a, b) => a + b, 0) / brF.length;
+  const brSigma = Math.sqrt(brF.reduce((a, b) => a + (b - brMean) ** 2, 0) / brF.length);
+  const brHighT = brMean + 0.5 * brSigma;
+  const baseNodes: SectorNode[] = baseRaw.map(n => ({ ...n, isGravityCenter: (n.masa - n.distancia) >= brHighT }));
   const nodes = countryName ? applyCountryProfile(baseNodes, countryName) : baseNodes;
 
   return { nodes, flows: computeFlows(nodes) };
@@ -421,13 +427,15 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
         const force = m ? (m.masa - m.distancia) / Math.max(1, m.friccion) : 0;
         return { id: p.id, force };
       }).sort((a, b) => b.force - a.force);
-      const topN = geoPoints.length;
-      const highCutoff = Math.ceil(topN / 3);
-      const lowCutoff = Math.floor(topN * 2 / 3);
-      const highAssetIds = new Set(assetForces.slice(0, highCutoff).map(x => x.id));
-      const lowAssetIds  = new Set(assetForces.slice(lowCutoff).map(x => x.id));
-      const getAssetTier = (id: string) =>
-        highAssetIds.has(id) ? 'high' : lowAssetIds.has(id) ? 'low' : 'medium';
+      const rawForces = assetForces.map(x => x.force);
+      const afMean  = rawForces.reduce((a, b) => a + b, 0) / rawForces.length;
+      const afSigma = Math.sqrt(rawForces.reduce((a, b) => a + (b - afMean) ** 2, 0) / rawForces.length);
+      const afHighT = afMean + 0.5 * afSigma;
+      const afLowT  = afMean - 0.5 * afSigma;
+      const getAssetTier = (id: string) => {
+        const f = assetForces.find(x => x.id === id)?.force ?? 0;
+        return f >= afHighT ? 'high' : f <= afLowT ? 'low' : 'medium';
+      };
 
       geoPoints.forEach(point => {
         const [x, y] = projection(point.coordinates) || [0, 0];
@@ -630,10 +638,13 @@ function drawSectorOverlay(
   const { nodes, flows } = getSectorData(scenarioId, macroRegime, liveSectorData, countryName, countrySectorData);
 
   // Tier classification by net gravitational force (masa - distancia)
-  const sortedByForce = [...nodes].sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia));
-  const n = sortedByForce.length;
-  const highIds   = new Set(sortedByForce.slice(0, Math.max(1, Math.round(n * 0.27))).map(x => x.id)); // top ~3
-  const lowIds    = new Set(sortedByForce.slice(-Math.max(1, Math.round(n * 0.27))).map(x => x.id));   // bottom ~3
+  const soF     = nodes.map(n => n.masa - n.distancia);
+  const soMean  = soF.reduce((a, b) => a + b, 0) / soF.length;
+  const soSigma = Math.sqrt(soF.reduce((a, b) => a + (b - soMean) ** 2, 0) / soF.length);
+  const soHighT = soMean + 0.5 * soSigma;
+  const soLowT  = soMean - 0.5 * soSigma;
+  const highIds = new Set(nodes.filter(n => (n.masa - n.distancia) >= soHighT).map(x => x.id));
+  const lowIds  = new Set(nodes.filter(n => (n.masa - n.distancia) <= soLowT).map(x => x.id));
   const TIER_COLORS = {
     high:   { node: '#22c55e', fill: '#0d1f14', label: '#22c55e', glow: '#22c55e' },
     medium: { node: '#475569', fill: '#1a2233', label: '#64748b', glow: '#475569' },
