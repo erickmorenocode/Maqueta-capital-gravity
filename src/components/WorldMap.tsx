@@ -608,6 +608,19 @@ function drawSectorOverlay(
   const textSize = Math.min(radius * 0.09, 6);
 
   const { nodes, flows } = getSectorData(scenarioId, macroRegime, liveSectorData, countryName, countrySectorData);
+
+  // Tier classification by net gravitational force (masa - distancia)
+  const sortedByForce = [...nodes].sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia));
+  const n = sortedByForce.length;
+  const highIds   = new Set(sortedByForce.slice(0, Math.max(1, Math.round(n * 0.27))).map(x => x.id)); // top ~3
+  const lowIds    = new Set(sortedByForce.slice(-Math.max(1, Math.round(n * 0.27))).map(x => x.id));   // bottom ~3
+  const TIER_COLORS = {
+    high:   { node: '#22c55e', fill: '#0d1f14', label: '#22c55e', glow: '#22c55e' },
+    medium: { node: '#475569', fill: '#1a2233', label: '#64748b', glow: '#475569' },
+    low:    { node: '#ef4444', fill: '#1f0d0d', label: '#ef4444', glow: '#ef4444' },
+  };
+  const getTier = (id: string) => highIds.has(id) ? 'high' : lowIds.has(id) ? 'low' : 'medium';
+
   const sectorGroup = g.append('g').attr('class', 'country-sectors');
 
   // Background glow on center
@@ -615,8 +628,8 @@ function drawSectorOverlay(
     .attr('cx', cx)
     .attr('cy', cy)
     .attr('r', radius * 0.15)
-    .attr('fill', '#22D3EE')
-    .attr('opacity', 0.04);
+    .attr('fill', '#22c55e')
+    .attr('opacity', 0.03);
 
   // Draw flow arcs (from sector → through center → to sector)
   flows.forEach(flow => {
@@ -631,11 +644,14 @@ function drawSectorOverlay(
     const tx = cx + radius * Math.cos(ta);
     const ty = cy + radius * Math.sin(ta);
 
+    const destTier  = getTier(flow.to);
+    const flowColor = TIER_COLORS[destTier].node;
+
     // Quadratic bezier through centroid
     sectorGroup.append('path')
       .attr('d', `M${fx},${fy} Q${cx},${cy} ${tx},${ty}`)
       .attr('fill', 'none')
-      .attr('stroke', '#22D3EE')
+      .attr('stroke', flowColor)
       .attr('stroke-width', Math.max(flow.strength * 1.5, 0.4))
       .attr('opacity', 0.35 + flow.strength * 0.3)
       .attr('class', 'animate-flow');
@@ -656,7 +672,7 @@ function drawSectorOverlay(
         ${ax - uy * arrowSize - ux * arrowSize},${ay + ux * arrowSize - uy * arrowSize}
         ${ax + uy * arrowSize - ux * arrowSize},${ay - ux * arrowSize - uy * arrowSize}
       `)
-      .attr('fill', '#22D3EE')
+      .attr('fill', flowColor)
       .attr('opacity', 0.5 + flow.strength * 0.3);
   });
 
@@ -665,7 +681,9 @@ function drawSectorOverlay(
     const node = nodes.find(n => n.id === sector.id);
     if (!node) return;
 
-    const angle = (sector.angle * Math.PI) / 180;
+    const tier   = getTier(node.id);
+    const tc     = TIER_COLORS[tier];
+    const angle  = (sector.angle * Math.PI) / 180;
     const x = cx + radius * Math.cos(angle);
     const y = cy + radius * Math.sin(angle);
 
@@ -674,11 +692,12 @@ function drawSectorOverlay(
       .style('cursor', 'pointer')
       .on('click', (event: MouseEvent) => { event.stopPropagation(); onSectorClick?.(sector.id); });
 
-    if (node.isGravityCenter) {
+    // Animated glow for HIGH tier only
+    if (tier === 'high') {
       nodeGroup.append('circle')
         .attr('r', nodeR * 1.5)
         .attr('fill', 'none')
-        .attr('stroke', '#22D3EE')
+        .attr('stroke', tc.glow)
         .attr('stroke-width', 0.5)
         .attr('opacity', 0.5)
         .append('animate')
@@ -691,15 +710,15 @@ function drawSectorOverlay(
 
     nodeGroup.append('circle')
       .attr('r', nodeR)
-      .attr('fill', node.isGravityCenter ? '#22D3EE' : '#1e3a5f')
-      .attr('stroke', node.isGravityCenter ? '#22D3EE' : '#2563eb')
+      .attr('fill', tc.fill)
+      .attr('stroke', tc.node)
       .attr('stroke-width', 0.5);
 
     // Masa indicator ring
     nodeGroup.append('circle')
       .attr('r', nodeR * (0.8 + node.masa / 200))
       .attr('fill', 'none')
-      .attr('stroke', node.isGravityCenter ? '#22D3EE' : '#1e3a5f')
+      .attr('stroke', tc.node)
       .attr('stroke-width', 0.3)
       .attr('opacity', 0.4);
 
@@ -708,7 +727,7 @@ function drawSectorOverlay(
       .text(sector.name)
       .attr('y', labelOffset)
       .attr('text-anchor', 'middle')
-      .attr('fill', node.isGravityCenter ? '#22D3EE' : '#94A3B8')
+      .attr('fill', tc.label)
       .attr('font-size', `${textSize}px`)
       .attr('font-family', 'monospace')
       .attr('font-weight', 'bold')
@@ -719,7 +738,7 @@ function drawSectorOverlay(
       .text(`${node.masa}`)
       .attr('y', nodeR + textSize + 1)
       .attr('text-anchor', 'middle')
-      .attr('fill', node.isGravityCenter ? '#22D3EE' : '#4B6CB7')
+      .attr('fill', tc.label)
       .attr('font-size', `${textSize * 0.85}px`)
       .attr('font-family', 'monospace')
       .attr('pointer-events', 'none')
