@@ -409,11 +409,31 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
 
       const pointsGroup = g.append('g').attr('class', 'points');
 
+      const ASSET_TIER_COLORS = {
+        high:   { node: '#22c55e', label: '#22c55e', glow: '#22c55e' },
+        medium: { node: '#475569', label: '#64748b', glow: '#475569' },
+        low:    { node: '#ef4444', label: '#ef4444', glow: '#ef4444' },
+      };
+
+      // Compute tier for each asset point based on relative force ranking
+      const assetForces = geoPoints.map(p => {
+        const m = scenario.metrics?.[p.id];
+        const force = m ? (m.masa - m.distancia) / Math.max(1, m.friccion) : 0;
+        return { id: p.id, force };
+      }).sort((a, b) => b.force - a.force);
+      const topN = geoPoints.length;
+      const highCutoff = Math.ceil(topN / 3);
+      const lowCutoff = Math.floor(topN * 2 / 3);
+      const highAssetIds = new Set(assetForces.slice(0, highCutoff).map(x => x.id));
+      const lowAssetIds  = new Set(assetForces.slice(lowCutoff).map(x => x.id));
+      const getAssetTier = (id: string) =>
+        highAssetIds.has(id) ? 'high' : lowAssetIds.has(id) ? 'low' : 'medium';
+
       geoPoints.forEach(point => {
         const [x, y] = projection(point.coordinates) || [0, 0];
-        const metrics = scenario.metrics?.[point.id];
-        const force = metrics ? (metrics.masa - metrics.distancia) / Math.max(1, metrics.friccion) : 0;
-        const isGravityCenter = force > 8.0;
+        const tier = getAssetTier(point.id);
+        const colors = ASSET_TIER_COLORS[tier];
+        const isHigh = tier === 'high';
 
         const pointNode = pointsGroup.append('g')
           .attr('transform', `translate(${x}, ${y})`)
@@ -423,11 +443,11 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
             onPointClick(point);
           });
 
-        if (isGravityCenter) {
+        if (isHigh) {
           pointNode.append('circle')
             .attr('r', 10)
             .attr('fill', 'none')
-            .attr('stroke', mc.accentColor)
+            .attr('stroke', colors.glow)
             .attr('stroke-width', 2)
             .attr('opacity', 0.6)
             .append('animate')
@@ -440,7 +460,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
           pointNode.append('circle')
             .attr('r', 10)
             .attr('fill', 'none')
-            .attr('stroke', mc.accentColor)
+            .attr('stroke', colors.glow)
             .attr('stroke-width', 1)
             .attr('opacity', 0.6)
             .append('animate')
@@ -452,19 +472,19 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
         }
 
         pointNode.append('circle')
-          .attr('r', isGravityCenter ? 6 : 4)
-          .attr('fill', isGravityCenter ? mc.accentColor : mc.dotSecondary);
+          .attr('r', isHigh ? 6 : 4)
+          .attr('fill', colors.node);
 
         pointNode.append('text')
           .text(point.name.toUpperCase())
           .attr('y', 15)
           .attr('text-anchor', 'middle')
-          .attr('fill', isGravityCenter ? mc.accentColor : mc.textSecondary)
+          .attr('fill', colors.label)
           .attr('font-size', '8px')
           .attr('font-weight', 'bold')
           .attr('font-family', 'monospace')
           .attr('pointer-events', 'none')
-          .attr('opacity', isGravityCenter ? 1 : 0.4);
+          .attr('opacity', isHigh ? 1 : tier === 'medium' ? 0.5 : 0.7);
       });
 
       const flowsGroup = g.append('g').attr('class', 'flows');
