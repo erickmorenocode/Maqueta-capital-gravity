@@ -239,15 +239,17 @@ function computeAssetMetrics(
   const avg50     = quote.fiftyDayAverage    ?? price;
   const changePct = quote.regularMarketChangePercent ?? 0;
 
-  const rangeW      = high52 - low52;
-  const retorno     = Math.round(rangeW > 0 ? clamp(((price - low52) / rangeW) * 100, 0, 100) : 50);
-  const momentum    = avg50 > 0 ? ((price / avg50) - 1) * 200 : 0;
-  const crecimiento = Math.round(clamp(50 + momentum, 0, 100));
-  const liqPenalty  = regime === 'crisis' ? 10 : regime === 'risk-off' ? 5 : 0;
+  const rangeW         = high52 - low52;
+  const retorno        = Math.round(rangeW > 0 ? clamp(((price - low52) / rangeW) * 100, 0, 100) : 50);
+  const momentum       = avg50 > 0 ? ((price / avg50) - 1) * 200 : 0;
+  const dailyReturn    = Math.round(clamp(50 + changePct * 5, 0, 100));
+  const momentum50d    = Math.round(clamp(50 + momentum, 0, 100));
+  const crecimiento    = Math.round(clamp(momentum50d * 0.5 + dailyReturn * 0.5, 0, 100));
+  const liqPenalty     = regime === 'crisis' ? 10 : regime === 'risk-off' ? 5 : 0;
   const liquidezActivo = Math.round(clamp(base.liquidez - liqPenalty, 0, 100));
-  const trendSign   = price >= avg50 ? 1 : -1;
-  const vixPenalty  = clamp((vix - 15) * 2, 0, 50);
-  const confianza   = Math.round(clamp(65 + trendSign * 15 - vixPenalty, 0, 100));
+  const trendSign      = price >= avg50 ? 1 : -1;
+  const vixPenalty     = clamp((vix - 15) * 2, 0, 50);
+  const confianza      = Math.round(clamp(60 + trendSign * 10 + changePct * 2 - vixPenalty, 0, 100));
   const masa        = Math.round(weights.w1 * retorno + weights.w2 * crecimiento + weights.w3 * liquidezActivo + weights.w4 * confianza);
 
   const midPrice    = (high52 + low52) / 2;
@@ -275,7 +277,7 @@ function computeAssetMetrics(
     },
     fuerzaG:                0,
     zscoreFlows:            parseFloat((changePct / 2).toFixed(2)),
-    masaJustificacion:      `Ret=${retorno}(52s) Crec=${crecimiento}(50d) Liq=${liquidezActivo} Conf=${confianza}`,
+    masaJustificacion:      `Ret=${retorno}(52s) Daily=${dailyReturn}(${changePct.toFixed(1)}%) Crec=${crecimiento} Liq=${liquidezActivo} Conf=${confianza}`,
     distanciaJustificacion: `Vol52s=${annualRange.toFixed(1)}%×VIX=${vix.toFixed(1)} → vol=${volatilidad}, spr=${spread}`,
     friccionJustificacion:  `F_base=${base.friccion}×${fricMult}=${friccion}`,
     distanciaRaw,
@@ -293,11 +295,12 @@ function computeSectorMetric(
   weights: { w1: number; w2: number; w3: number; w4: number },
   countryName?: string,
 ): RawSectorMetric {
-  const base  = SECTOR_BASE[sectorId];
-  const price = quote.regularMarketPrice ?? 100;
-  const low52 = quote.fiftyTwoWeekLow    ?? price * 0.80;
-  const high52 = quote.fiftyTwoWeekHigh  ?? price * 1.20;
-  const avg50 = quote.fiftyDayAverage    ?? price;
+  const base     = SECTOR_BASE[sectorId];
+  const price    = quote.regularMarketPrice ?? 100;
+  const low52    = quote.fiftyTwoWeekLow    ?? price * 0.80;
+  const high52   = quote.fiftyTwoWeekHigh   ?? price * 1.20;
+  const avg50    = quote.fiftyDayAverage    ?? price;
+  const changePct = quote.regularMarketChangePercent ?? 0;
 
   const rangeW   = high52 - low52;
   const midPrice = (high52 + low52) / 2;
@@ -306,6 +309,7 @@ function computeSectorMetric(
   // ── MASA: M = w1(Return) + w2(Growth) + w3(Liquidity) + w4(Confidence) ──────
   const priceReturn   = Math.round(rangeW > 0 ? clamp((price - low52) / rangeW * 100, 0, 100) : 50);
   const priceMomentum = Math.round(clamp((price / (avg50 || price) - 1) * 300 + 50, 0, 100));
+  const dailyReturn   = Math.round(clamp(50 + changePct * 5, 0, 100));
   const earningsYield = quote.trailingEps && quote.trailingEps > 0 && price > 0
     ? Math.round(clamp(quote.trailingEps / price * 1000, 0, 100))
     : 50;
@@ -320,7 +324,7 @@ function computeSectorMetric(
   const roeScore      = Math.round(clamp(50 + (quote.returnOnEquity ?? 0) * 150, 0, 100));
   const creditScore   = countryName ? (COUNTRY_CREDIT_RATINGS[countryName] ?? 70) : 70;
 
-  const Return     = priceReturn * 0.4 + priceMomentum * 0.3 + earningsYield * 0.3;
+  const Return     = priceReturn * 0.20 + priceMomentum * 0.20 + dailyReturn * 0.30 + earningsYield * 0.30;
   const Growth     = epsGrowth * 0.5 + roeScore * 0.3 + dividendYield * 0.2;
   const Liquidity  = volumeScore * 0.5 + marketCapScore * 0.3 + dividendYield * 0.2;
   const Confidence = priceMomentum * 0.4 + roeScore * 0.3 + creditScore * 0.3;
@@ -381,26 +385,29 @@ function computeCountrySectorNodes(
   const cpi          = COUNTRY_CPI[countryName] ?? 3.0;
 
   // Country ETF live metrics
-  let countryReturn    = 50;
-  let countryMomentum  = 50;
-  let countryVolatility = 20;
-  let countryVolume    = 50;
-  let countryDivYield  = 0;
+  let countryReturn      = 50;
+  let countryMomentum    = 50;
+  let countryDailyReturn = 50;
+  let countryVolatility  = 20;
+  let countryVolume      = 50;
+  let countryDivYield    = 0;
 
   if (countryQuote) {
-    const cp = countryQuote.regularMarketPrice ?? 100;
-    const cl = countryQuote.fiftyTwoWeekLow    ?? cp * 0.85;
-    const ch = countryQuote.fiftyTwoWeekHigh   ?? cp * 1.15;
-    const ca = countryQuote.fiftyDayAverage    ?? cp;
-    const cr = ch - cl;
-    countryReturn   = Math.round(cr > 0 ? clamp((cp - cl) / cr * 100, 0, 100) : 50);
-    countryMomentum = Math.round(clamp(50 + (cp / (ca || cp) - 1) * 300, 0, 100));
-    const cMid      = (ch + cl) / 2;
-    countryVolatility = cMid > 0 ? clamp((ch - cl) / cMid * 100 * (macro.vix / 20) * 0.5, 5, 60) : 20;
-    countryVolume   = countryQuote.regularMarketVolume && countryQuote.averageDailyVolume3Month
+    const cp         = countryQuote.regularMarketPrice         ?? 100;
+    const cl         = countryQuote.fiftyTwoWeekLow            ?? cp * 0.85;
+    const ch         = countryQuote.fiftyTwoWeekHigh           ?? cp * 1.15;
+    const ca         = countryQuote.fiftyDayAverage            ?? cp;
+    const countryChgPct = countryQuote.regularMarketChangePercent ?? 0;
+    const cr         = ch - cl;
+    countryReturn      = Math.round(cr > 0 ? clamp((cp - cl) / cr * 100, 0, 100) : 50);
+    countryMomentum    = Math.round(clamp(50 + (cp / (ca || cp) - 1) * 300, 0, 100));
+    countryDailyReturn = Math.round(clamp(50 + countryChgPct * 5, 0, 100));
+    const cMid         = (ch + cl) / 2;
+    countryVolatility  = cMid > 0 ? clamp((ch - cl) / cMid * 100 * (macro.vix / 20) * 0.5, 5, 60) : 20;
+    countryVolume      = countryQuote.regularMarketVolume && countryQuote.averageDailyVolume3Month
       ? Math.round(clamp(countryQuote.regularMarketVolume / countryQuote.averageDailyVolume3Month * 50, 0, 100))
       : 50;
-    countryDivYield = Math.round(clamp((countryQuote.trailingAnnualDividendYield ?? 0) * 200, 0, 100));
+    countryDivYield    = Math.round(clamp((countryQuote.trailingAnnualDividendYield ?? 0) * 200, 0, 100));
   }
 
   const countryConfidence = Math.round(
@@ -412,7 +419,12 @@ function computeCountrySectorNodes(
     const domFactor = profile ? (profile[node.id] ?? 50) / 100 : 0.5;
 
     // MASA: global sector × (1 - domFactor blend) + country signal × domFactor
-    const countryMasaSignal = countryReturn * 0.35 + countryMomentum * 0.25 + countryConfidence * 0.25 + countryDivYield * 0.15;
+    const countryMasaSignal =
+      countryReturn      * 0.20 +
+      countryMomentum    * 0.15 +
+      countryDailyReturn * 0.30 +
+      countryConfidence  * 0.20 +
+      countryDivYield    * 0.15;
     const masa = Math.round(clamp(
       node.masa * (1 - domFactor * 0.45) + countryMasaSignal * domFactor * 0.45,
       5, 100
@@ -536,9 +548,10 @@ export async function GET() {
     allSymbols.forEach((sym, i) => { if (quotes[i]) quoteMap[sym] = quotes[i]!; });
 
     // Macro values
-    const vix   = quoteMap['^VIX']?.regularMarketPrice  ?? 20;
-    const us10y = quoteMap['^TNX']?.regularMarketPrice  ?? 4.3;
-    const us2y  = quoteMap['^IRX']?.regularMarketPrice  ?? 4.7;
+    const vix     = quoteMap['^VIX']?.regularMarketPrice          ?? 20;
+    const vixChg  = quoteMap['^VIX']?.regularMarketChangePercent  ?? 0;
+    const us10y   = quoteMap['^TNX']?.regularMarketPrice          ?? 4.3;
+    const us2y    = quoteMap['^IRX']?.regularMarketPrice          ?? 4.7;
     const move  = quoteMap['^MOVE']?.regularMarketPrice ?? 0;
 
     // HY-OAS proxy: HYG distance from 52w high
@@ -549,9 +562,10 @@ export async function GET() {
       : 10;
 
     const regime: 'risk-on' | 'risk-off' | 'crisis' | 'neutral' =
-      vix > 28 ? 'crisis' :
-      vix < 18 ? 'risk-on' :
-      vix <= 28 ? 'risk-off' :
+      vix > 30 || (vix > 24 && vixChg > 8)  ? 'crisis'  :
+      vix < 18 && vixChg < 5                 ? 'risk-on' :
+      vix < 20                               ? 'risk-on' :
+      vix > 24 || vixChg > 5                 ? 'risk-off':
       'neutral';
 
     const regimeMult = regime === 'crisis' ? 1.5 : regime === 'risk-off' ? 1.2 : 1.0;
