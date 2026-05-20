@@ -371,22 +371,41 @@ export default function App() {
               <div className="space-y-2 pt-2 border-t border-ink/5">
                 <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Clasificación de Fuerza G</span>
                 <p className="text-[7px] font-mono text-ink/25 italic leading-tight">
-                  Ranking relativo por escenario — top ⅓ / medio ⅓ / bajo ⅓
+                  Ranking relativo — umbrales calculados del escenario activo
                 </p>
-                <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
-                  <div className="p-1 rounded bg-green-500/10 border border-green-500/30 text-center">
-                    <div className="text-green-400 font-bold uppercase">Alta</div>
-                    <div className="text-ink/40">top ⅓</div>
-                  </div>
-                  <div className="p-1 rounded bg-slate-600/20 border border-slate-600/30 text-center">
-                    <div className="text-slate-400 font-bold uppercase">Media</div>
-                    <div className="text-ink/40">medio ⅓</div>
-                  </div>
-                  <div className="p-1 rounded bg-red-500/10 border border-red-500/20 text-center">
-                    <div className="text-red-400 font-bold uppercase">Baja</div>
-                    <div className="text-ink/40">bajo ⅓</div>
-                  </div>
-                </div>
+                {(() => {
+                  const forces = Object.values(activeScenario.metrics ?? {})
+                    .map(m => (m.masa - m.distancia) / Math.max(1, m.friccion))
+                    .sort((a, b) => b - a);
+                  const n = forces.length;
+                  if (n === 0) return null;
+                  const highCut = Math.ceil(n / 3);
+                  const lowCut  = Math.floor(n * 2 / 3);
+                  const highMin = forces[highCut - 1] ?? 0;
+                  const lowMax  = forces[lowCut]     ?? 0;
+                  const pctHigh = Math.round((highCut / n) * 100);
+                  const pctLow  = Math.round(((n - lowCut) / n) * 100);
+                  const pctMid  = 100 - pctHigh - pctLow;
+                  return (
+                    <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
+                      <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
+                        <div className="text-green-400 font-bold uppercase">Alta</div>
+                        <div className="text-green-400/70 text-[7px]">≥ {highMin.toFixed(1)}</div>
+                        <div className="text-ink/30 text-[6px]">top {pctHigh}%</div>
+                      </div>
+                      <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
+                        <div className="text-slate-400 font-bold uppercase">Media</div>
+                        <div className="text-slate-400/70 text-[7px]">{lowMax.toFixed(1)}–{highMin.toFixed(1)}</div>
+                        <div className="text-ink/30 text-[6px]">medio {pctMid}%</div>
+                      </div>
+                      <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
+                        <div className="text-red-400 font-bold uppercase">Baja</div>
+                        <div className="text-red-400/70 text-[7px]">&lt; {lowMax.toFixed(1)}</div>
+                        <div className="text-ink/30 text-[6px]">bajo {pctLow}%</div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </section>
