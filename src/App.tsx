@@ -15,6 +15,7 @@ import {
   ArrowDownLeft,
   Sun,
   Moon,
+  ChevronDown,
 } from 'lucide-react';
 import { SCENARIOS, GEO_POINTS, MarketScenario, GeoPoint, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
@@ -69,6 +70,7 @@ export default function App() {
   const [selectedSectorId, setSelectedSectorId] = useState<string | null>(null);
   const [expandedSectorField, setExpandedSectorField] = useState<{ sectorId: string; field: 'masa' | 'distancia' | 'friccion' } | null>(null);
   const [darkMode, setDarkMode] = useState(true);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -253,47 +255,76 @@ export default function App() {
               </h2>
             </div>
             
-            <div className="grid grid-cols-1 gap-2">
-              {scenarios.map((scenario) => (
-                <button
-                  key={scenario.id}
-                  onClick={() => setActiveScenario(scenario)}
-                  className={cn(
-                    "group relative p-4 rounded-lg border text-left transition-all duration-300 overflow-hidden",
-                    activeScenario.id === scenario.id 
-                      ? "bg-accent/10 border-accent/50 glow-accent" 
-                      : "bg-surface/40 border-border hover:border-ink/20",
-                    (scenario.id === 'live' || scenario.id === 'current') && "border-accent/40 bg-accent/5"
+            <div className="relative">
+              {/* Trigger */}
+              <button
+                onClick={() => setScenarioOpen(o => !o)}
+                className={cn(
+                  "w-full p-3 rounded-lg border text-left transition-all duration-200 flex items-center justify-between gap-2",
+                  (activeScenario.id === 'live' || activeScenario.id === 'current')
+                    ? "bg-accent/10 border-accent/40"
+                    : "bg-surface/40 border-border hover:border-ink/20"
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {activeScenario.id === 'crisis' && <ShieldAlert className="w-3 h-3 text-danger shrink-0" />}
+                  {activeScenario.id === 'hawkish' && <TrendingUp className="w-3 h-3 text-accent shrink-0" />}
+                  <span className="text-xs font-bold uppercase tracking-tight text-accent truncate">
+                    {activeScenario.name}
+                  </span>
+                  {(activeScenario.id === 'live' || activeScenario.id === 'current') && (
+                    <span className="px-1.5 py-0.5 rounded bg-accent text-bg text-[8px] font-bold animate-pulse shrink-0">
+                      {activeScenario.id === 'current' && isLiveLoading ? 'ANALIZANDO' : 'LIVE'}
+                    </span>
                   )}
-                >
-                  {activeScenario.id === scenario.id && (
-                    <motion.div 
-                      layoutId="active-indicator"
-                      className="absolute left-0 top-0 bottom-0 w-1 bg-accent"
-                    />
-                  )}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={cn(
-                        "text-xs font-bold uppercase tracking-tight",
-                        activeScenario.id === scenario.id ? "text-accent" : "text-ink/80"
-                      )}>
-                        {scenario.name}
-                      </span>
-                      {(scenario.id === 'live' || scenario.id === 'current') && (
-                        <span className="px-1.5 py-0.5 rounded bg-accent text-bg text-[8px] font-bold animate-pulse">
-                          {scenario.id === 'current' && isLiveLoading ? 'ANALIZANDO' : 'LIVE'}
-                        </span>
-                      )}
-                    </div>
-                    {scenario.id === 'crisis' && <ShieldAlert className="w-3 h-3 text-danger" />}
-                    {scenario.id === 'hawkish' && <TrendingUp className="w-3 h-3 text-accent" />}
-                  </div>
-                  <p className="text-[10px] text-ink/40 leading-relaxed font-mono">
-                    {scenario.description}
-                  </p>
-                </button>
-              ))}
+                </div>
+                <ChevronDown className={cn("w-3 h-3 text-ink/40 shrink-0 transition-transform duration-200", scenarioOpen && "rotate-180")} />
+              </button>
+
+              {/* Dropdown */}
+              <AnimatePresence>
+                {scenarioOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute z-30 top-full mt-1 w-full rounded-lg border border-border bg-bg/95 backdrop-blur shadow-xl overflow-hidden"
+                  >
+                    {scenarios.map((scenario) => (
+                      <button
+                        key={scenario.id}
+                        onClick={() => { setActiveScenario(scenario); setScenarioOpen(false); }}
+                        className={cn(
+                          "w-full p-3 text-left transition-colors duration-150 border-b border-ink/5 last:border-0",
+                          activeScenario.id === scenario.id
+                            ? "bg-accent/10"
+                            : "hover:bg-ink/5"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          {scenario.id === 'crisis' && <ShieldAlert className="w-3 h-3 text-danger shrink-0" />}
+                          {scenario.id === 'hawkish' && <TrendingUp className="w-3 h-3 text-accent shrink-0" />}
+                          <span className={cn(
+                            "text-[11px] font-bold uppercase tracking-tight",
+                            activeScenario.id === scenario.id ? "text-accent" : "text-ink/80"
+                          )}>
+                            {scenario.name}
+                          </span>
+                          {(scenario.id === 'live' || scenario.id === 'current') && (
+                            <span className="px-1 py-0.5 rounded bg-accent text-bg text-[7px] font-bold animate-pulse">
+                              {scenario.id === 'current' && isLiveLoading ? 'ANALIZANDO' : 'LIVE'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[9px] text-ink/35 leading-snug font-mono line-clamp-2">
+                          {scenario.description}
+                        </p>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </section>
 
