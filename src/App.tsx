@@ -379,29 +379,29 @@ export default function App() {
                     .sort((a, b) => b - a);
                   const n = forces.length;
                   if (n === 0) return null;
-                  const highCut = Math.ceil(n / 3);
-                  const lowCut  = Math.floor(n * 2 / 3);
-                  const highMin = forces[highCut - 1] ?? 0;
-                  const lowMax  = forces[lowCut]     ?? 0;
-                  const pctHigh = Math.round((highCut / n) * 100);
-                  const pctLow  = Math.round(((n - lowCut) / n) * 100);
-                  const pctMid  = 100 - pctHigh - pctLow;
+                  const highCut  = Math.ceil(n / 3);
+                  const lowCut   = Math.floor(n * 2 / 3);
+                  const highMin  = forces[highCut - 1] ?? 0;
+                  const lowMax   = forces[lowCut]      ?? 0;
+                  const cntHigh  = highCut;
+                  const cntLow   = n - lowCut;
+                  const cntMid   = n - cntHigh - cntLow;
                   return (
                     <div className="grid grid-cols-3 gap-1 text-[8px] font-mono">
                       <div className="p-1.5 rounded bg-green-500/10 border border-green-500/30 text-center space-y-0.5">
                         <div className="text-green-400 font-bold uppercase">Alta</div>
                         <div className="text-green-400/70 text-[7px]">≥ {highMin.toFixed(1)}</div>
-                        <div className="text-ink/30 text-[6px]">top {pctHigh}%</div>
+                        <div className="text-ink/30 text-[6px]">{cntHigh} activo{cntHigh !== 1 ? 's' : ''}</div>
                       </div>
                       <div className="p-1.5 rounded bg-slate-600/20 border border-slate-600/30 text-center space-y-0.5">
                         <div className="text-slate-400 font-bold uppercase">Media</div>
                         <div className="text-slate-400/70 text-[7px]">{lowMax.toFixed(1)}–{highMin.toFixed(1)}</div>
-                        <div className="text-ink/30 text-[6px]">medio {pctMid}%</div>
+                        <div className="text-ink/30 text-[6px]">{cntMid} activo{cntMid !== 1 ? 's' : ''}</div>
                       </div>
                       <div className="p-1.5 rounded bg-red-500/10 border border-red-500/20 text-center space-y-0.5">
                         <div className="text-red-400 font-bold uppercase">Baja</div>
                         <div className="text-red-400/70 text-[7px]">&lt; {lowMax.toFixed(1)}</div>
-                        <div className="text-ink/30 text-[6px]">bajo {pctLow}%</div>
+                        <div className="text-ink/30 text-[6px]">{cntLow} activo{cntLow !== 1 ? 's' : ''}</div>
                       </div>
                     </div>
                   );
