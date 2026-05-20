@@ -408,7 +408,7 @@ export default function App() {
             {/* Sector Drill-down Overlay */}
             <AnimatePresence>
               {selectedSectorId && selectedCountry && (() => {
-                const { nodes, flows } = getSectorData(activeScenario.id, activeScenario.macroRegime, activeScenario.sectorData);
+                const { nodes, flows } = getSectorData(activeScenario.id, activeScenario.macroRegime, activeScenario.sectorData, selectedCountry ?? undefined, activeScenario.countrySectorData);
                 const node = nodes.find(n => n.id === selectedSectorId);
                 const sector = SECTORS.find(s => s.id === selectedSectorId);
                 if (!node || !sector) return null;
