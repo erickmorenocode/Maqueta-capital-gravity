@@ -252,6 +252,133 @@ export interface GeoPoint {
   type: 'country' | 'asset';
 }
 
+export interface GeopoliticalEvent {
+  id: string;
+  name: string;
+  coordinates: [number, number];
+  type: 'conflict' | 'tension' | 'sanction';
+  severity: 'high' | 'medium' | 'low';
+  description: string;
+  countries: string[];
+  benefitedSectors: { id: string; label: string; reason: string }[];
+  harmedSectors: { id: string; label: string; reason: string }[];
+  supplyChainImpact: string;
+}
+
+export const GEO_EVENTS: GeopoliticalEvent[] = [
+  {
+    id: 'russia-ukraine',
+    name: 'Guerra Rusia-Ucrania',
+    coordinates: [32, 49],
+    type: 'conflict',
+    severity: 'high',
+    description: 'Conflicto armado en curso desde febrero de 2022. Rusia ocupa territorios en el este y sur de Ucrania. NATO apoya a Ucrania con armamento y financiamiento. Impacto severo en cadenas de suministro de energía, granos y metales industriales.',
+    countries: ['Rusia', 'Ucrania', 'NATO', 'Unión Europea'],
+    benefitedSectors: [
+      { id: 'energy', label: 'Energía', reason: 'Sustitución de gas ruso impulsa GNL, renovables y nuclear en Europa' },
+      { id: 'basic_materials', label: 'Materiales Básicos', reason: 'Demanda de acero y titanio para defensa y reconstrucción' },
+      { id: 'industrials', label: 'Industriales', reason: 'Contratos de defensa y reconstrucción disparan cartera de pedidos' },
+    ],
+    harmedSectors: [
+      { id: 'cons_staples', label: 'Consumo Básico', reason: 'Ucrania y Rusia = 30% trigo global — precios agrícolas al alza' },
+      { id: 'utilities', label: 'Servicios Públicos', reason: 'Crisis energética en Europa eleva costos operativos de utilities' },
+      { id: 'real_estate', label: 'Bienes Raíces', reason: 'Alta inflación y tasas elevadas por crisis energética frenan inversión' },
+    ],
+    supplyChainImpact: 'Corte de gas natural ruso a Europa, disrupciones en exportaciones de granos por Mar Negro, escasez de neón y titanio críticos para semiconductores y aviación.',
+  },
+  {
+    id: 'middle-east',
+    name: 'Conflicto Medio Oriente',
+    coordinates: [35, 31],
+    type: 'conflict',
+    severity: 'high',
+    description: 'Conflicto entre Israel, Hamas y Hezbollah con participación indirecta de Irán. Escalada regional con riesgo de cierre del Estrecho de Ormuz. Afecta el 20% del comercio de petróleo global y rutas aéreas regionales.',
+    countries: ['Israel', 'Palestina', 'Líbano', 'Irán', 'Estados Unidos'],
+    benefitedSectors: [
+      { id: 'energy', label: 'Energía', reason: 'Prima de riesgo geopolítico eleva precio del petróleo y gas natural' },
+      { id: 'industrials', label: 'Industriales', reason: 'Contratos de defensa y sistemas de seguridad en expansión' },
+    ],
+    harmedSectors: [
+      { id: 'cons_discretionary', label: 'Consumo Discrecional', reason: 'Turismo regional colapsado, confianza del consumidor deteriorada' },
+      { id: 'financial', label: 'Financiero', reason: 'Exposición a deuda soberana regional y riesgo sistémico elevado' },
+      { id: 'communication', label: 'Comunicación', reason: 'Boicots y riesgo reputacional para plataformas digitales globales' },
+    ],
+    supplyChainImpact: 'Riesgo de cierre del Estrecho de Ormuz afectaría 17M barriles/día. Canal de Suez bajo presión. Rutas aéreas redirigidas elevan costos logísticos hasta 40%.',
+  },
+  {
+    id: 'red-sea',
+    name: 'Crisis Mar Rojo — Hutíes',
+    coordinates: [43, 13],
+    type: 'conflict',
+    severity: 'high',
+    description: 'Ataques de milicias hutíes de Yemen contra buques comerciales en el Mar Rojo y Golfo de Adén. El 15% del comercio marítimo mundial que transita por el Canal de Suez está siendo redirigido por el Cabo de Buena Esperanza, añadiendo 14 días de tránsito.',
+    countries: ['Yemen', 'Hutíes', 'Arabia Saudita', 'Estados Unidos', 'Reino Unido'],
+    benefitedSectors: [
+      { id: 'energy', label: 'Energía', reason: 'Rutas alternativas más largas aumentan demanda de combustible naviero' },
+      { id: 'industrials', label: 'Industriales', reason: 'Empresas de logística y transporte marítimo alternativo se benefician' },
+    ],
+    harmedSectors: [
+      { id: 'cons_discretionary', label: 'Consumo Discrecional', reason: 'Costos de flete x3, retrasos en entregas de bienes de consumo importados' },
+      { id: 'cons_staples', label: 'Consumo Básico', reason: 'Inflación importada por mayores costos logísticos en alimentos procesados' },
+      { id: 'technology', label: 'Tecnología', reason: 'Retrasos en componentes electrónicos desde Asia hacia Europa hasta 6 semanas' },
+    ],
+    supplyChainImpact: 'Fletes Suez-Europa +300%. Rutas redirigidas +14 días. 50% de buques evitan Mar Rojo. Impacto severo en inventarios just-in-time de manufactura global.',
+  },
+  {
+    id: 'taiwan-strait',
+    name: 'Tensión Estrecho de Taiwán',
+    coordinates: [120, 24],
+    type: 'tension',
+    severity: 'high',
+    description: 'China intensifica maniobras militares alrededor de Taiwán. TSMC produce el 90% de los chips avanzados (≤7nm) del mundo. Un bloqueo o invasión paralizaría la industria tecnológica global con pérdidas estimadas en $2.5 billones.',
+    countries: ['China', 'Taiwán', 'Estados Unidos', 'Japón', 'Corea del Sur'],
+    benefitedSectors: [
+      { id: 'technology', label: 'Tecnología', reason: 'Aceleración de reshoring: Intel Arizona, TSMC Phoenix, Samsung Texas' },
+      { id: 'industrials', label: 'Industriales', reason: 'Construcción de megafábricas de chips en EEUU, Europa y Japón' },
+    ],
+    harmedSectors: [
+      { id: 'technology', label: 'Tecnología', reason: 'Disrupciones en suministro de chips avanzados afectarían toda la electrónica' },
+      { id: 'cons_discretionary', label: 'Consumo Discrecional', reason: 'EVs, smartphones, PCs — todos dependientes de chips taiwaneses' },
+      { id: 'industrials', label: 'Industriales', reason: 'Maquinaria avanzada y automatización paralizadas a corto plazo' },
+    ],
+    supplyChainImpact: 'TSMC = 90% chips ≤7nm. Bloqueo impacta: Apple, NVIDIA, AMD, Qualcomm. Reshoring acelerado pero insuficiente a corto plazo (3-5 años). Pérdidas estimadas $2.5T globales.',
+  },
+  {
+    id: 'south-china-sea',
+    name: 'Mar del Sur de China',
+    coordinates: [114, 12],
+    type: 'tension',
+    severity: 'medium',
+    description: 'Disputas territoriales entre China, Filipinas, Vietnam y Malasia por islas y recursos en el Mar del Sur de China. El 30% del comercio marítimo global transita por esta zona incluyendo rutas cruciales de energía y manufactura.',
+    countries: ['China', 'Filipinas', 'Vietnam', 'Malasia', 'Estados Unidos'],
+    benefitedSectors: [
+      { id: 'energy', label: 'Energía', reason: 'Exploración de reservas offshore estimadas en 125B barriles de petróleo' },
+    ],
+    harmedSectors: [
+      { id: 'cons_discretionary', label: 'Consumo Discrecional', reason: 'Disrupciones en rutas comerciales elevan costos de importación desde Asia' },
+      { id: 'financial', label: 'Financiero', reason: 'Incertidumbre frena inversión extranjera directa en países involucrados' },
+    ],
+    supplyChainImpact: '30% del comercio marítimo global en riesgo. Ruta crítica para petróleo del Golfo Pérsico hacia Japón/Corea. Recursos offshore por 125B barriles en disputa.',
+  },
+  {
+    id: 'iran-sanctions',
+    name: 'Sanciones Irán / Nuclear',
+    coordinates: [53, 33],
+    type: 'sanction',
+    severity: 'medium',
+    description: 'Sanciones occidentales a Irán por programa nuclear y apoyo a grupos armados regionales. Irán exporta petróleo a China evadiendo sanciones. Tensiones con Israel sobre instalaciones nucleares en Fordow y Natanz.',
+    countries: ['Irán', 'Estados Unidos', 'Israel', 'Unión Europea', 'China'],
+    benefitedSectors: [
+      { id: 'energy', label: 'Energía', reason: 'Reducción de oferta iraní presiona precios del crudo al alza' },
+    ],
+    harmedSectors: [
+      { id: 'energy', label: 'Energía', reason: 'Riesgo de cierre del Estrecho de Ormuz si escala el conflicto nuclear' },
+      { id: 'financial', label: 'Financiero', reason: 'Bancos con exposición a Medio Oriente bajo presión regulatoria OFAC' },
+    ],
+    supplyChainImpact: 'Irán controla Estrecho de Ormuz — 17M barriles/día (20% del petróleo global). Programa de misiles amenaza instalaciones petroleras sauditas y de EAU.',
+  },
+];
+
 export const GEO_POINTS: GeoPoint[] = [
   { id: 'USD', name: 'USD', coordinates: [-95, 37], type: 'asset' },
   { id: 'Europe', name: 'EUROPA', coordinates: [10, 50], type: 'country' },

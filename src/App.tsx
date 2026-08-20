@@ -17,7 +17,7 @@ import {
   Moon,
   ChevronDown,
 } from 'lucide-react';
-import { SCENARIOS, GEO_POINTS, MarketScenario, GeoPoint, DEFAULT_PRICES, MarketPrices } from './data';
+import { SCENARIOS, GEO_POINTS, GEO_EVENTS, MarketScenario, GeoPoint, GeopoliticalEvent, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
 import { fetchLiveMarketGravity } from './services/geminiService';
 import { clsx, type ClassValue } from 'clsx';
@@ -73,6 +73,8 @@ export default function App() {
   const [scenarioOpen, setScenarioOpen] = useState(false);
   const [formulasOpen, setFormulasOpen] = useState(false);
   const [justificacionOpen, setJustificacionOpen] = useState(false);
+  const [showGeoEvents, setShowGeoEvents] = useState(false);
+  const [selectedGeoEvent, setSelectedGeoEvent] = useState<GeopoliticalEvent | null>(null);
 
   useEffect(() => {
     if (darkMode) {
@@ -686,7 +688,94 @@ export default function App() {
               onPointClick={handlePointClick}
               onCountrySelect={handleCountrySelect}
               onSectorClick={handleSectorClick}
+              geoEvents={GEO_EVENTS}
+              showGeoEvents={showGeoEvents}
+              onEventClick={setSelectedGeoEvent}
             />
+
+            {/* Toggle button — geopolitical events */}
+            <button
+              onClick={() => setShowGeoEvents(o => !o)}
+              className={cn(
+                'absolute bottom-4 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded border text-[9px] font-mono font-bold uppercase tracking-widest transition-all',
+                showGeoEvents
+                  ? 'bg-orange-500/20 border-orange-500/60 text-orange-400'
+                  : 'bg-surface/60 border-border text-ink/40 hover:border-orange-500/40 hover:text-orange-400'
+              )}
+            >
+              <ShieldAlert className="w-3 h-3" />
+              Eventos Geopolíticos
+            </button>
+
+            {/* Geopolitical event detail panel */}
+            <AnimatePresence>
+              {selectedGeoEvent && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-4 right-4 z-20 w-[320px] max-h-[560px] overflow-y-auto custom-scrollbar glass rounded-xl border border-orange-500/30 p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          'text-[7px] font-mono font-bold uppercase px-1.5 py-0.5 rounded',
+                          selectedGeoEvent.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                          selectedGeoEvent.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-500/20 text-slate-400'
+                        )}>
+                          {selectedGeoEvent.severity === 'high' ? 'ALTO RIESGO' : selectedGeoEvent.severity === 'medium' ? 'RIESGO MEDIO' : 'BAJO RIESGO'}
+                        </span>
+                        <span className="text-[7px] font-mono text-ink/30 uppercase">
+                          {selectedGeoEvent.type === 'conflict' ? 'CONFLICTO' : selectedGeoEvent.type === 'tension' ? 'TENSIÓN' : 'SANCIÓN'}
+                        </span>
+                      </div>
+                      <h3 className="text-[11px] font-bold text-ink/90">{selectedGeoEvent.name}</h3>
+                    </div>
+                    <button onClick={() => setSelectedGeoEvent(null)} className="text-ink/30 hover:text-ink/80 shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <p className="text-[9px] font-mono text-ink/60 leading-relaxed">{selectedGeoEvent.description}</p>
+
+                  <div className="space-y-1">
+                    <span className="text-[7px] font-mono text-ink/30 uppercase tracking-widest">Países involucrados</span>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedGeoEvent.countries.map(c => (
+                        <span key={c} className="text-[7px] font-mono px-1.5 py-0.5 rounded bg-ink/10 text-ink/60">{c}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 p-2 rounded bg-ink/5 border border-ink/5">
+                    <span className="text-[7px] font-mono text-ink/30 uppercase tracking-widest">Impacto Cadena de Suministro</span>
+                    <p className="text-[8px] font-mono text-ink/60 leading-relaxed">{selectedGeoEvent.supplyChainImpact}</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[7px] font-mono text-accent/70 uppercase tracking-widest">Sectores Beneficiados</span>
+                    {selectedGeoEvent.benefitedSectors.map(s => (
+                      <div key={s.id} className="p-2 rounded bg-green-500/5 border border-green-500/20 space-y-0.5">
+                        <span className="text-[8px] font-mono font-bold text-green-400">{s.label}</span>
+                        <p className="text-[7px] font-mono text-ink/50 leading-tight">{s.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[7px] font-mono text-danger/70 uppercase tracking-widest">Sectores Perjudicados</span>
+                    {selectedGeoEvent.harmedSectors.map(s => (
+                      <div key={s.id} className="p-2 rounded bg-red-500/5 border border-red-500/20 space-y-0.5">
+                        <span className="text-[8px] font-mono font-bold text-red-400">{s.label}</span>
+                        <p className="text-[7px] font-mono text-ink/50 leading-tight">{s.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             
             {/* Sector Drill-down Overlay */}
             <AnimatePresence>

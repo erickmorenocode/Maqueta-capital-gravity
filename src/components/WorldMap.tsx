@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
-import { GeoPoint, MarketScenario } from '../data';
+import { GeoPoint, MarketScenario, GeopoliticalEvent } from '../data';
 
 interface WorldMapProps {
   scenario: MarketScenario;
@@ -11,6 +11,9 @@ interface WorldMapProps {
   onPointClick: (point: GeoPoint) => void;
   onCountrySelect?: (countryName: string | null) => void;
   onSectorClick?: (sectorId: string) => void;
+  geoEvents?: GeopoliticalEvent[];
+  showGeoEvents?: boolean;
+  onEventClick?: (event: GeopoliticalEvent) => void;
 }
 
 const G8_ISO_IDS = new Set(['840', '124', '250', '276', '380', '392', '826', '643']);
@@ -299,7 +302,7 @@ export function getSectorData(
   return { nodes, flows: computeFlows(nodes) };
 }
 
-export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme = 'dark', onPointClick, onCountrySelect, onSectorClick }) => {
+export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme = 'dark', onPointClick, onCountrySelect, onSectorClick, geoEvents = [], showGeoEvents = false, onEventClick }) => {
   const isLight = theme === 'light';
   const mc = {
     countryFill:   isLight ? '#e8eef5' : '#111111',
@@ -320,8 +323,11 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const svgSelRef = useRef<d3.Selection<SVGSVGElement, unknown, null, undefined> | null>(null);
   const selectedFeatureRef = useRef<any>(null);
+  const projectionRef = useRef<d3.GeoProjection | null>(null);
   const onCountrySelectRef = useRef(onCountrySelect);
   const onSectorClickRef = useRef(onSectorClick);
+  const onEventClickRef = useRef(onEventClick);
+  useEffect(() => { onEventClickRef.current = onEventClick; });
   useEffect(() => { onCountrySelectRef.current = onCountrySelect; });
   useEffect(() => { onSectorClickRef.current = onSectorClick; });
 
@@ -343,6 +349,7 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
 
     gRef.current = g;
     pathRef.current = path;
+    projectionRef.current = projection;
     svgSelRef.current = svg;
 
     const zoom = d3.zoom<SVGSVGElement, unknown>()
@@ -536,6 +543,77 @@ export const WorldMap: React.FC<WorldMapProps> = ({ scenario, geoPoints, theme =
     if (!selectedCountry || !selectedFeatureRef.current) return;
     drawSectorOverlay(g, path, selectedFeatureRef.current, selectedCountry, scenario.id, onSectorClickRef.current, scenario.macroRegime, scenario.sectorData, scenario.countrySectorData);
   }, [selectedCountry, scenario.id]);
+
+  // Geopolitical event markers — separate effect, no JSON re-fetch
+  useEffect(() => {
+    const g = gRef.current;
+    const proj = projectionRef.current;
+    if (!g || !proj) return;
+    g.selectAll('.geo-events-layer').remove();
+    if (!showGeoEvents || geoEvents.length === 0) return;
+
+    const eventsGroup = g.append('g').attr('class', 'geo-events-layer');
+    const SEVERITY_COLOR: Record<string, string> = {
+      high: '#f97316', medium: '#eab308', low: '#64748b',
+    };
+
+    geoEvents.forEach(ev => {
+      const [x, y] = proj(ev.coordinates) || [0, 0];
+      const color = SEVERITY_COLOR[ev.severity];
+
+      const evNode = eventsGroup.append('g')
+        .attr('transform', `translate(${x}, ${y})`)
+        .style('cursor', 'pointer')
+        .on('click', (event: any) => {
+          event.stopPropagation();
+          onEventClickRef.current?.(ev);
+        });
+
+      // Pulse ring for high severity
+      if (ev.severity === 'high') {
+        evNode.append('circle')
+          .attr('r', 10)
+          .attr('fill', 'none')
+          .attr('stroke', color)
+          .attr('stroke-width', 1.5)
+          .attr('opacity', 0.7)
+          .append('animate')
+          .attr('attributeName', 'r')
+          .attr('from', '6').attr('to', '20')
+          .attr('dur', '1.8s').attr('repeatCount', 'indefinite');
+      }
+
+      // Warning triangle
+      evNode.append('path')
+        .attr('d', 'M 0 -7 L 6.5 5 L -6.5 5 Z')
+        .attr('fill', color)
+        .attr('opacity', 0.9)
+        .attr('stroke', '#000')
+        .attr('stroke-width', 0.5);
+
+      // Exclamation mark
+      evNode.append('text')
+        .text('!')
+        .attr('y', 4.5)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#000')
+        .attr('font-size', '7px')
+        .attr('font-weight', 'bold')
+        .attr('font-family', 'monospace')
+        .attr('pointer-events', 'none');
+
+      // Label
+      evNode.append('text')
+        .text(ev.name.toUpperCase())
+        .attr('y', 18)
+        .attr('text-anchor', 'middle')
+        .attr('fill', color)
+        .attr('font-size', '6px')
+        .attr('font-weight', 'bold')
+        .attr('font-family', 'monospace')
+        .attr('pointer-events', 'none');
+    });
+  }, [showGeoEvents, geoEvents]);
 
   const handleReset = () => {
     setSelectedCountry(null);
