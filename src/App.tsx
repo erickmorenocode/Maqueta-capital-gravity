@@ -570,11 +570,11 @@ export default function App() {
           <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
             <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
               <Info className="w-3 h-3" />
-              {activeScenario.id === 'live' ? 'Análisis en Vivo' : 'Insight de Gravedad'}
+              {activeScenario.id === 'live' ? 'Análisis en Vivo' : 'Análisis del Escenario'}
             </h2>
             <div className="space-y-3">
               <div className="p-3 rounded bg-surface/60 border border-ink/5 max-h-[45vh] overflow-y-auto custom-scrollbar">
-                {activeScenario.id === 'live' && activeScenario.description
+                {activeScenario.description
                   ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
                       <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
                         {line}
@@ -582,7 +582,7 @@ export default function App() {
                     ))
                   : (
                     <p className="text-[10px] font-mono text-ink/60 leading-relaxed italic">
-                      El capital no va al mayor retorno absoluto; va al mejor retorno ajustado por riesgo y liquidez. El dinero se mueve hacia donde hay mayor atracción ajustada por riesgo.
+                      Cargando análisis...
                     </p>
                   )
                 }
