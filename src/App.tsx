@@ -1319,7 +1319,7 @@ export default function App() {
             )}
           </section>
 
-          <section className="p-6 rounded-xl border border-accent/20 bg-accent/5 relative overflow-hidden group">
+          <section className="p-6 rounded-xl border border-accent/20 bg-accent/5 relative group">
             <div className="absolute top-0 right-0 p-2">
               <Activity className="w-4 h-4 text-accent/40" />
             </div>
@@ -1340,11 +1340,21 @@ export default function App() {
                 </span>
               </div>
             )}
-            <p className="text-[10px] font-mono text-ink/60 leading-relaxed mb-4">
+            {/* Scrollable description — full analysis readable without page scroll */}
+            <div className="max-h-[260px] overflow-y-auto custom-scrollbar mb-4 pr-1">
               {activeScenario.id === 'live'
-                ? activeScenario.description
-                : `La atracción gravitacional actual se está desplazando hacia ${activeScenario.gravityCenters.join(' y ')} debido a condiciones de ${activeScenario.name.toLowerCase()}.`}
-            </p>
+                ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
+                    <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
+                      {line}
+                    </p>
+                  ))
+                : (
+                  <p className="text-[10px] font-mono text-ink/60 leading-relaxed">
+                    {`La atracción gravitacional actual se está desplazando hacia ${activeScenario.gravityCenters.join(' y ')} debido a condiciones de ${activeScenario.name.toLowerCase()}.`}
+                  </p>
+                )
+              }
+            </div>
 
             {activeScenario.id === 'live' && activeScenario.newsContext && activeScenario.newsContext.headlines.length > 0 && (
               <div className="space-y-2 border-t border-ink/10 pt-3 mb-4">
@@ -1367,8 +1377,8 @@ export default function App() {
                     {activeScenario.newsContext.regimeSignal}
                   </p>
                 )}
-                <div className="space-y-1.5 max-h-[220px] overflow-y-auto custom-scrollbar">
-                  {activeScenario.newsContext.headlines.slice(0, 6).map((item, i) => (
+                <div className="space-y-1.5 max-h-[320px] overflow-y-auto custom-scrollbar">
+                  {activeScenario.newsContext.headlines.map((item, i) => (
                     <div key={i} className="flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5">
                       <div className={cn(
                         'w-1.5 h-1.5 rounded-full mt-[3px] shrink-0',
@@ -1376,7 +1386,7 @@ export default function App() {
                         item.sentiment === 'bearish' ? 'bg-danger' : 'bg-ink/30'
                       )} />
                       <div className="space-y-0.5 min-w-0">
-                        <p className="text-[8px] font-mono text-ink/70 leading-tight line-clamp-2">{item.title}</p>
+                        <p className="text-[8px] font-mono text-ink/70 leading-tight">{item.title}</p>
                         <span className="text-[7px] font-mono text-ink/30">{item.source}</span>
                       </div>
                     </div>
