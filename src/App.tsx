@@ -1148,10 +1148,10 @@ export default function App() {
                       const fuerza = force / 10;
                       const isSelected = selectedSectorId === sector.id;
                       const comps = deriveSectorComponents(node.masa, node.distancia);
-                      let statusLabel = 'MEDIA';
-                      let valueColor = 'text-ink/60';
-                      if (force >= highT) { statusLabel = 'ALTA'; valueColor = 'text-accent'; }
-                      else if (force <= lowT) { statusLabel = 'BAJA'; valueColor = 'text-danger'; }
+                      // tier matches WorldMap circle color: high=verde, low=rojo, medium=gris
+                      const tier = force >= highT ? 'high' : force <= lowT ? 'low' : 'medium';
+                      const statusLabel = tier === 'high' ? 'ALTA' : tier === 'low' ? 'BAJA' : 'MEDIA';
+                      const valueColor  = tier === 'high' ? 'text-accent' : tier === 'low' ? 'text-danger' : 'text-ink/60';
 
                       return (
                         <button
@@ -1159,20 +1159,24 @@ export default function App() {
                           onClick={() => setSelectedSectorId(isSelected ? null : sector.id)}
                           className={cn(
                             'w-full p-3 rounded-lg border transition-all text-left',
-                            node.isGravityCenter ? 'bg-accent/5 border-accent/30' : 'bg-surface/20 border-border opacity-60 hover:opacity-90',
+                            tier === 'high'   ? 'bg-accent/5 border-accent/30' :
+                            tier === 'low'    ? 'bg-danger/5 border-danger/30 opacity-70 hover:opacity-100' :
+                                                'bg-surface/20 border-border opacity-60 hover:opacity-90',
                             isSelected && 'border-accent ring-1 ring-accent/50'
                           )}
                         >
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[9px] font-mono text-ink/70 uppercase">{sector.fullName}</span>
-                            {node.isGravityCenter && <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
+                            {tier === 'high' && <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />}
+                            {tier === 'low'  && <div className="w-1.5 h-1.5 rounded-full bg-danger" />}
                           </div>
                           <div className="flex items-center justify-between text-[9px] font-mono">
                             <span className="text-ink/30">Fuerza G · {statusLabel}</span>
                             <span className={valueColor}>{fuerza.toFixed(2)}</span>
                           </div>
                           <div className="mt-1.5 h-0.5 bg-ink/5 rounded-full overflow-hidden">
-                            <div className={cn('h-full rounded-full', node.isGravityCenter ? 'bg-accent' : 'bg-ink/20')}
+                            <div className={cn('h-full rounded-full',
+                              tier === 'high' ? 'bg-accent' : tier === 'low' ? 'bg-danger' : 'bg-ink/20')}
                               style={{ width: `${Math.min(100, Math.max(0, (fuerza / 10) * 100))}%` }} />
                           </div>
                         </button>
