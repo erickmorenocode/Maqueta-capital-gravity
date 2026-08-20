@@ -328,6 +328,17 @@ export default function App() {
                 )}
               </AnimatePresence>
             </div>
+
+            {/* AI analysis box — only for live scenario */}
+            {activeScenario.description && (
+              <div className="p-3 rounded-lg border border-ink/10 bg-surface/40 max-h-[28vh] overflow-y-auto custom-scrollbar">
+                {activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
+                  <p key={i} className="text-[9px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
@@ -569,41 +580,6 @@ export default function App() {
             </div>
           </section>
 
-          <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
-            <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
-              <Info className="w-3 h-3" />
-              {activeScenario.id === 'live' ? 'Análisis en Vivo' : 'Análisis del Escenario'}
-            </h2>
-            <div className="space-y-3">
-              <div className="p-3 rounded bg-surface/60 border border-ink/5">
-                {activeScenario.description
-                  ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
-                      <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
-                        {line}
-                      </p>
-                    ))
-                  : (
-                    <p className="text-[10px] font-mono text-ink/60 leading-relaxed italic">
-                      Cargando análisis...
-                    </p>
-                  )
-                }
-              </div>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between text-[10px] font-mono">
-                  <span className="text-ink/40">Volatilidad Global</span>
-                  <span className="text-accent">14.2%</span>
-                </div>
-                <div className="w-full h-1 bg-ink/5 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: '42%' }}
-                    className="h-full bg-accent"
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
         </div>
 
         {/* Main Content - Map */}
