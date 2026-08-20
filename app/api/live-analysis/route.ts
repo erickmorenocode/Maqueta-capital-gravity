@@ -685,7 +685,10 @@ interface OptionsMetrics {
   optionsPressure: number; // [-100, 100]
 }
 const OPTIONS_ZERO: OptionsMetrics = { netGex: 0, putCallRatio: 1, gammaFlip: null, optionsPressure: 0 };
-const OPTIONS_SYMS = [...Object.values(SECTOR_SYMBOLS), 'QQQ', 'GLD', 'TLT'];
+const OPTIONS_SYMS = [
+  ...Object.values(SECTOR_SYMBOLS),
+  'QQQ', 'GLD', 'TLT', 'EEM', 'EZU', 'EWJ', 'IBIT', 'USO', 'UUP',
+];
 
 function bsGamma(S: number, K: number, T: number, r: number, sigma: number): number {
   if (T <= 0 || sigma <= 0 || S <= 0 || K <= 0) return 0;
@@ -838,7 +841,9 @@ export async function GET() {
     const countrySyms        = Object.values(COUNTRY_ETF_SYMBOLS).filter((s): s is string => s !== null);
     const macroSyms          = ['^VIX', '^TNX', '^IRX', 'HYG', '^MOVE'];
     const countrySectorSyms  = Object.values(COUNTRY_SECTOR_SYMBOLS).flatMap(m => Object.values(m));
-    const allSymbols         = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms, ...countrySectorSyms])];
+    // Additional instruments for asset-level institutional pressure
+    const assetAuxSyms       = ['BZ=F', 'ZB=F', '^N225', 'GLD', 'IBIT', 'USO', 'UUP', 'SPY'];
+    const allSymbols         = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms, ...countrySectorSyms, ...assetAuxSyms])];
 
     const [rawQuotes, yahooNews, investingNews, rawOptions] = await Promise.all([
       Promise.all(allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null))),
@@ -905,6 +910,36 @@ export async function GET() {
     const zCurve   = clamp((us10y - us2y) / 2, -0.5, 1.0);
     const zscoreFlows = zDXY * 0.3 + zHYG * 0.4 + zCurve * 0.3;
 
+    // ── Asset institutional pressure (price/vol 40% + GEX/PCR 60%) ──────────
+    // Mirrors sector logic. Oil = WTI+Brent avg. Bonds = TLT+ZB=F futures − ^TNX
+    // yield change. Crypto = BTC-USD + IBIT options. News sentiment overlaid.
+    const ap = (sym: string, optSym?: string): number => {
+      const pp = computeInstitutionalPressure(quoteMap[sym] ?? {}, regimeMult);
+      const op = optSym ? (optionsMap[optSym]?.optionsPressure ?? 0) : 0;
+      return clamp(pp * 0.40 + op * 0.60, -100, 100);
+    };
+    const assetPressures: Record<string, number> = {
+      'USD':              ap('DX-Y.NYB', 'UUP'),
+      'Europe':           ap('EZU',      'EZU'),
+      'Emerging Markets': ap('EEM',      'EEM'),
+      'Gold':             ap('GLD',      'GLD'),
+      'Norte America':    clamp(ap('QQQ', 'QQQ') * 0.6 + ap('SPY') * 0.4, -100, 100),
+      'Asia':             clamp(ap('EWJ', 'EWJ') * 0.6 + ap('^N225') * 0.4, -100, 100),
+      'Bonds':            clamp(
+        ap('TLT', 'TLT') * 0.50 +
+        ap('ZB=F')        * 0.30 +
+        (-computeInstitutionalPressure(quoteMap['^TNX'] ?? {}, regimeMult)) * 0.20,
+        -100, 100
+      ),
+      'Crypto':           clamp(ap('BTC-USD') * 0.50 + ap('IBIT', 'IBIT') * 0.50, -100, 100),
+      'Oil':              clamp(ap('CL=F', 'USO') * 0.50 + ap('BZ=F') * 0.50, -100, 100),
+    };
+    // News sentiment: direct market-reality overlay on all asset nodes
+    const newsBoost = clamp(newsSentimentScore * 25, -20, 20);
+    for (const id of Object.keys(assetPressures)) {
+      assetPressures[id] = clamp((assetPressures[id] ?? 0) + newsBoost, -100, 100);
+    }
+
     // ── Asset metrics ──────────────────────────────────────────────────────────
     const rawAssets: Record<string, RawAssetMetrics> = {};
     for (const [id, sym] of Object.entries(ASSET_SYMBOLS)) {
@@ -917,13 +952,26 @@ export async function GET() {
     const metrics: Record<string, GravityMetrics> = {};
     for (const [id, raw] of Object.entries(rawAssets)) {
       const distancia = Math.round(((raw.distanciaRaw - minAD) / rangeAD) * 80 + 10);
-      const fuerzaG   = parseFloat(((raw.masa - distancia) / Math.max(1, raw.friccion)).toFixed(2));
+      const pressure  = assetPressures[id] ?? 0;
+      const masaAdj   = Math.round(clamp(raw.masa + clamp(pressure / 5, -15, 15), 0, 100));
+      const fuerzaG   = parseFloat(((masaAdj - distancia) / Math.max(1, raw.friccion)).toFixed(2));
       const { distanciaRaw: _dr, changePercent: _cp, ...rest } = raw;
-      metrics[id] = { ...rest, distancia, fuerzaG };
+      metrics[id] = {
+        ...rest,
+        masa: masaAdj,
+        distancia,
+        fuerzaG,
+        masaJustificacion: (rest.masaJustificacion ?? '') + ` | P=${pressure.toFixed(0)} adj=${masaAdj}`,
+      };
     }
 
+    // Gravity centers: mean + 0.5σ of fuerzaG — same dynamic threshold as sectors
+    const afForces = Object.values(metrics).map(m => m.fuerzaG ?? 0);
+    const afMean   = afForces.reduce((a, b) => a + b, 0) / afForces.length;
+    const afSigma  = Math.sqrt(afForces.reduce((a, b) => a + (b - afMean) ** 2, 0) / afForces.length);
+    const afHighT  = afMean + 0.5 * afSigma;
     const gravityCenters = Object.entries(metrics)
-      .filter(([, m]) => (m.fuerzaG ?? 0) > 8)
+      .filter(([, m]) => (m.fuerzaG ?? 0) >= afHighT)
       .map(([id]) => id);
 
     const flows = computeFlows(metrics);
