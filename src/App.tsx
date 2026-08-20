@@ -72,6 +72,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [scenarioOpen, setScenarioOpen] = useState(false);
   const [formulasOpen, setFormulasOpen] = useState(false);
+  const [justificacionOpen, setJustificacionOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -585,6 +586,92 @@ export default function App() {
                 })()}
               </div>
             </div>}
+          </section>
+
+          <section className="rounded-lg border border-border bg-surface/20">
+            <button
+              onClick={() => setJustificacionOpen(o => !o)}
+              className="w-full p-4 flex items-center justify-between text-left"
+            >
+              <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
+                <BarChart3 className="w-3 h-3" />
+                {activeScenario.id === 'live' ? 'Justificación del Modelo' : 'Sentimiento del Mercado'}
+              </h2>
+              <ChevronDown className={cn("w-3 h-3 text-ink/40 shrink-0 transition-transform duration-200", justificacionOpen && "rotate-180")} />
+            </button>
+            {justificacionOpen && (
+              <div className="px-4 pb-4 space-y-3">
+                {activeScenario.id === 'live' && activeScenario.rotationSignal && (
+                  <div className="flex items-center gap-2 p-2 rounded bg-ink/5 border border-ink/5">
+                    <span className="text-[7px] font-mono text-ink/30 uppercase tracking-widest shrink-0">Rotación Sectorial</span>
+                    <span className={cn(
+                      'text-[8px] font-mono font-bold uppercase tracking-widest',
+                      activeScenario.rotationSignal.includes('RISK-ON')   ? 'text-accent' :
+                      activeScenario.rotationSignal.includes('RISK-OFF')  ? 'text-danger' :
+                      activeScenario.rotationSignal.includes('VALUE')     ? 'text-yellow-400' :
+                      activeScenario.rotationSignal.includes('DEFENSIVO') ? 'text-yellow-400' : 'text-ink/40'
+                    )}>
+                      {activeScenario.rotationSignal}
+                    </span>
+                  </div>
+                )}
+                {activeScenario.id === 'live' && activeScenario.newsContext && activeScenario.newsContext.headlines.length > 0 && (
+                  <div className="space-y-2 border-t border-ink/10 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest">
+                        Noticias · Yahoo &amp; Investing
+                      </span>
+                      <span className={cn(
+                        'text-[8px] font-mono font-bold',
+                        activeScenario.newsContext.newsSentiment === 'bullish' ? 'text-accent' :
+                        activeScenario.newsContext.newsSentiment === 'bearish' ? 'text-danger' : 'text-ink/40'
+                      )}>
+                        {activeScenario.newsContext.newsSentiment === 'bullish' ? 'ALCISTA' :
+                         activeScenario.newsContext.newsSentiment === 'bearish' ? 'BAJISTA' : 'NEUTRAL'}
+                        {' '}({activeScenario.newsContext.sentimentScore > 0 ? '+' : ''}{activeScenario.newsContext.sentimentScore.toFixed(2)})
+                      </span>
+                    </div>
+                    {activeScenario.newsContext.regimeSignal && (
+                      <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                        {activeScenario.newsContext.regimeSignal}
+                      </p>
+                    )}
+                    <div className="space-y-1.5 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                      {activeScenario.newsContext.headlines.map((item, i) => {
+                        const inner = (
+                          <>
+                            <div className={cn(
+                              'w-1.5 h-1.5 rounded-full mt-[3px] shrink-0',
+                              item.sentiment === 'bullish' ? 'bg-accent' :
+                              item.sentiment === 'bearish' ? 'bg-danger' : 'bg-ink/30'
+                            )} />
+                            <div className="space-y-0.5 min-w-0">
+                              <p className={cn(
+                                'text-[8px] font-mono leading-tight',
+                                item.url ? 'text-accent/80 group-hover:text-accent' : 'text-ink/70'
+                              )}>{item.title}</p>
+                              <span className="text-[7px] font-mono text-ink/30">
+                                {item.source}{item.url ? ' · ↗' : ''}
+                              </span>
+                            </div>
+                          </>
+                        );
+                        return item.url ? (
+                          <a key={i} href={item.url} target="_blank" rel="noopener noreferrer"
+                            className="group flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5 hover:bg-accent/5 hover:border-accent/20 transition-colors cursor-pointer">
+                            {inner}
+                          </a>
+                        ) : (
+                          <div key={i} className="flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5">
+                            {inner}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
         </div>
@@ -1311,93 +1398,6 @@ export default function App() {
             )}
           </section>
 
-          <section className="p-6 rounded-xl border border-accent/20 bg-accent/5 relative group">
-            <div className="absolute top-0 right-0 p-2">
-              <Activity className="w-4 h-4 text-accent/40" />
-            </div>
-            <h3 className="text-sm font-bold uppercase mb-2">
-              {activeScenario.id === 'live' ? 'Justificación del Modelo' : 'Sentimiento del Mercado'}
-            </h3>
-            {activeScenario.id === 'live' && activeScenario.rotationSignal && (
-              <div className="flex items-center gap-2 mb-3 p-2 rounded bg-ink/5 border border-ink/5">
-                <span className="text-[7px] font-mono text-ink/30 uppercase tracking-widest shrink-0">Rotación Sectorial</span>
-                <span className={cn(
-                  'text-[8px] font-mono font-bold uppercase tracking-widest',
-                  activeScenario.rotationSignal.includes('RISK-ON')    ? 'text-accent' :
-                  activeScenario.rotationSignal.includes('RISK-OFF')   ? 'text-danger' :
-                  activeScenario.rotationSignal.includes('VALUE')      ? 'text-yellow-400' :
-                  activeScenario.rotationSignal.includes('DEFENSIVO')  ? 'text-yellow-400' : 'text-ink/40'
-                )}>
-                  {activeScenario.rotationSignal}
-                </span>
-              </div>
-            )}
-
-            {activeScenario.id === 'live' && activeScenario.newsContext && activeScenario.newsContext.headlines.length > 0 && (
-              <div className="space-y-2 border-t border-ink/10 pt-3 mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest">
-                    Noticias · Yahoo &amp; Investing
-                  </span>
-                  <span className={cn(
-                    'text-[8px] font-mono font-bold',
-                    activeScenario.newsContext.newsSentiment === 'bullish' ? 'text-accent' :
-                    activeScenario.newsContext.newsSentiment === 'bearish' ? 'text-danger' : 'text-ink/40'
-                  )}>
-                    {activeScenario.newsContext.newsSentiment === 'bullish' ? 'ALCISTA' :
-                     activeScenario.newsContext.newsSentiment === 'bearish' ? 'BAJISTA' : 'NEUTRAL'}
-                    {' '}({activeScenario.newsContext.sentimentScore > 0 ? '+' : ''}{activeScenario.newsContext.sentimentScore.toFixed(2)})
-                  </span>
-                </div>
-                {activeScenario.newsContext.regimeSignal && (
-                  <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
-                    {activeScenario.newsContext.regimeSignal}
-                  </p>
-                )}
-                <div className="space-y-1.5 max-h-[360px] overflow-y-auto custom-scrollbar">
-                  {activeScenario.newsContext.headlines.map((item, i) => {
-                    const inner = (
-                      <>
-                        <div className={cn(
-                          'w-1.5 h-1.5 rounded-full mt-[3px] shrink-0',
-                          item.sentiment === 'bullish' ? 'bg-accent' :
-                          item.sentiment === 'bearish' ? 'bg-danger' : 'bg-ink/30'
-                        )} />
-                        <div className="space-y-0.5 min-w-0">
-                          <p className={cn(
-                            'text-[8px] font-mono leading-tight',
-                            item.url ? 'text-accent/80 group-hover:text-accent' : 'text-ink/70'
-                          )}>{item.title}</p>
-                          <span className="text-[7px] font-mono text-ink/30">
-                            {item.source}{item.url ? ' · ↗' : ''}
-                          </span>
-                        </div>
-                      </>
-                    );
-                    return item.url ? (
-                      <a
-                        key={i}
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5 hover:bg-accent/5 hover:border-accent/20 transition-colors cursor-pointer"
-                      >
-                        {inner}
-                      </a>
-                    ) : (
-                      <div key={i} className="flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5">
-                        {inner}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <button className="w-full py-2 rounded border border-accent/30 text-[10px] font-bold uppercase tracking-widest hover:bg-accent hover:text-bg transition-all">
-              Descargar Reporte
-            </button>
-          </section>
         </div>
       </main>
 
