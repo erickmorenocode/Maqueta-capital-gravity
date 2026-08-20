@@ -399,6 +399,96 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ── Robustez Sectorial ───────────────────────────────────── */}
+              <div className="space-y-3 pt-2 border-t border-ink/5">
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Robustez Sectorial</span>
+
+                <div className="grid grid-cols-1 gap-3 text-[9px] font-mono">
+                  {/* Presión institucional */}
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <div className="flex justify-between">
+                      <span className="text-yellow-400 font-bold">Presión Institucional</span>
+                      <span className="text-ink/50">Flujo sectorial [−100,100]</span>
+                    </div>
+                    <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                      P = PrecioVol×0.40 + Opciones×0.60
+                    </p>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>PrecioVol = momentum(MA50) + volSurge + Δ%diario</span>
+                      <span>Opciones  = GEX neto / PCR (Black-Scholes γ)</span>
+                      <span>γ = N′(d₁) / (S·σ·√T)  donde d₁ = (ln S/K + (r+σ²/2)T) / σ√T</span>
+                      <span>GEX = Σ(γ·OI·100·S²/100) calls − puts</span>
+                    </div>
+                  </div>
+
+                  {/* Fuerza ajustada por país */}
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <div className="flex justify-between">
+                      <span className="text-accent font-bold">Fuerza G Ajustada (Sector)</span>
+                      <span className="text-ink/50">Centro de gravedad</span>
+                    </div>
+                    <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                      G_adj = (M−d) + clamp(P/5,−15,15)×domFactor
+                    </p>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>domFactor = peso estructural del sector en cada economía</span>
+                      <span>Centro G: G_adj ≥ media + 0.5σ del escenario</span>
+                    </div>
+                  </div>
+
+                  {/* ETFs por país */}
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">ETFs / Índices por País G7</span>
+                      <span className="text-ink/50">Señal precio local</span>
+                    </div>
+                    <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                      P_país = PrecioVol(ticker_local)×0.60 + Opciones(ETF_US)×0.40
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>Canadá  → XIT/XEG/XFN.TO</span>
+                      <span>Alemania→ SAP/SIE/DBK.DE</span>
+                      <span>Francia → CAP/MC/BNP.PA</span>
+                      <span>Italia  → STM/ISP/ENI.MI</span>
+                      <span>Japón   → Sony/Toyota/MUFG.T</span>
+                      <span>RU      → HSBA/AZN/BP.L</span>
+                    </div>
+                  </div>
+
+                  {/* Régimen macro */}
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <div className="flex justify-between">
+                      <span className="text-danger font-bold">Régimen Macro</span>
+                      <span className="text-ink/50">Ajuste VIX + noticias</span>
+                    </div>
+                    <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                      régimen = VIX_base + Δsentimiento_noticias
+                    </p>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>VIX &lt; 15 → RISK-ON   | VIX 15–20 → NEUTRAL</span>
+                      <span>VIX 20–30 → RISK-OFF  | VIX &gt; 30 → CRISIS</span>
+                      <span>Score noticias [-3,+3] puede desplazar un nivel</span>
+                    </div>
+                  </div>
+
+                  {/* Sentimiento noticias */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">Sentimiento (Noticias)</span>
+                      <span className="text-ink/50">Yahoo + Investing.com</span>
+                    </div>
+                    <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                      score = Σ keywords alcistas − Σ keywords bajistas
+                    </p>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>Alcista: rally, surge, bullish, recovery…  (+1 c/u)</span>
+                      <span>Bajista: crash, recession, bearish, sell-off… (−1 c/u)</span>
+                      <span>score &gt; 0.5 → ALCISTA | &lt; −0.5 → BAJISTA</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-3 pt-2 border-t border-ink/5">
                 <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Clasificación de Fuerza G</span>
                 <p className="text-[7px] font-mono text-ink/25 italic leading-tight">
