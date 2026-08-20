@@ -761,7 +761,7 @@ async function fetchOptionsMetrics(sym: string): Promise<OptionsMetrics> {
 }
 
 // ─── News: types + sentiment helpers ─────────────────────────────────────────
-interface RawNewsItem { title: string; source: string; publishedAt: number; }
+interface RawNewsItem { title: string; source: string; publishedAt: number; url?: string; }
 
 const CRISIS_WORDS  = ['bank run','bailout','emergency','systemic','sovereign debt','margin call','liquidity crisis','circuit breaker'];
 const BEARISH_WORDS = ['crash','collapse','panic','recession','default','tariff','war','sanctions','selloff','sell-off','plunge','tumble','slump','stagflation','bear market','bank failure','contagion','layoffs','downgrade'];
@@ -788,10 +788,12 @@ function parseRssItems(xml: string, source: string, maxItems = 8): RawNewsItem[]
     const block  = m[1];
     const tMatch = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/);
     const dMatch = block.match(/<pubDate>(.*?)<\/pubDate>/);
+    const lMatch = block.match(/<link><!\[CDATA\[([\s\S]*?)\]\]><\/link>|<link>(https?:\/\/[^\s<]+)<\/link>/);
     const title  = tMatch ? (tMatch[1] ?? tMatch[2] ?? '').trim() : '';
     if (!title || title.length < 10) continue;
     const publishedAt = dMatch ? (new Date(dMatch[1]).getTime() || Date.now()) : Date.now();
-    items.push({ title, source, publishedAt });
+    const url = lMatch ? (lMatch[1] ?? lMatch[2] ?? '').trim() : undefined;
+    items.push({ title, source, publishedAt, url });
   }
   return items;
 }
@@ -800,7 +802,7 @@ async function fetchYahooNews(): Promise<RawNewsItem[]> {
   try {
     const result = await (yf as unknown as {
       search(q: string, opts: object): Promise<{
-        news?: Array<{ title?: string; publisher?: string; providerPublishTime?: Date | number }>;
+        news?: Array<{ title?: string; publisher?: string; providerPublishTime?: Date | number; link?: string }>;
       }>;
     }).search('market economy stocks global finance', { newsCount: 8 });
     if (!result?.news?.length) return [];
@@ -812,6 +814,7 @@ async function fetchYahooNews(): Promise<RawNewsItem[]> {
         publishedAt:
           n.providerPublishTime instanceof Date ? n.providerPublishTime.getTime() :
           typeof n.providerPublishTime === 'number' ? n.providerPublishTime * 1000 : Date.now(),
+        url: n.link ?? undefined,
       }));
   } catch { return []; }
 }
@@ -1060,8 +1063,8 @@ export async function GET() {
     }
 
     // ── Assemble scenario ──────────────────────────────────────────────────────
-    const newsHeadlines = scoredNews.slice(0, 8).map(({ title, source, publishedAt, score }) => ({
-      title, source, publishedAt,
+    const newsHeadlines = scoredNews.slice(0, 12).map(({ title, source, publishedAt, score, url }) => ({
+      title, source, publishedAt, url,
       sentiment: titleSentiment(score),
     }));
     const newsSentiment = titleSentiment(newsAvgScore > 0.5 ? 1 : newsAvgScore < -0.5 ? -1 : 0);

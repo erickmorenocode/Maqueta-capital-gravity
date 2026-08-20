@@ -1340,8 +1340,8 @@ export default function App() {
                 </span>
               </div>
             )}
-            {/* Scrollable description — full analysis readable without page scroll */}
-            <div className="max-h-[260px] overflow-y-auto custom-scrollbar mb-4 pr-1">
+            {/* Full analysis — scrollable, no clipping */}
+            <div className="max-h-[420px] overflow-y-auto custom-scrollbar mb-4 pr-1">
               {activeScenario.id === 'live'
                 ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
                     <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
@@ -1377,20 +1377,42 @@ export default function App() {
                     {activeScenario.newsContext.regimeSignal}
                   </p>
                 )}
-                <div className="space-y-1.5 max-h-[320px] overflow-y-auto custom-scrollbar">
-                  {activeScenario.newsContext.headlines.map((item, i) => (
-                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5">
-                      <div className={cn(
-                        'w-1.5 h-1.5 rounded-full mt-[3px] shrink-0',
-                        item.sentiment === 'bullish' ? 'bg-accent' :
-                        item.sentiment === 'bearish' ? 'bg-danger' : 'bg-ink/30'
-                      )} />
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="text-[8px] font-mono text-ink/70 leading-tight">{item.title}</p>
-                        <span className="text-[7px] font-mono text-ink/30">{item.source}</span>
+                <div className="space-y-1.5 max-h-[360px] overflow-y-auto custom-scrollbar">
+                  {activeScenario.newsContext.headlines.map((item, i) => {
+                    const inner = (
+                      <>
+                        <div className={cn(
+                          'w-1.5 h-1.5 rounded-full mt-[3px] shrink-0',
+                          item.sentiment === 'bullish' ? 'bg-accent' :
+                          item.sentiment === 'bearish' ? 'bg-danger' : 'bg-ink/30'
+                        )} />
+                        <div className="space-y-0.5 min-w-0">
+                          <p className={cn(
+                            'text-[8px] font-mono leading-tight',
+                            item.url ? 'text-accent/80 group-hover:text-accent' : 'text-ink/70'
+                          )}>{item.title}</p>
+                          <span className="text-[7px] font-mono text-ink/30">
+                            {item.source}{item.url ? ' · ↗' : ''}
+                          </span>
+                        </div>
+                      </>
+                    );
+                    return item.url ? (
+                      <a
+                        key={i}
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5 hover:bg-accent/5 hover:border-accent/20 transition-colors cursor-pointer"
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <div key={i} className="flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5">
+                        {inner}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

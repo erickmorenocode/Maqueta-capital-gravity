@@ -75,6 +75,7 @@ export interface NewsItem {
   source: string;
   publishedAt: number;
   sentiment: 'bullish' | 'bearish' | 'neutral';
+  url?: string;
 }
 
 export interface NewsContext {
