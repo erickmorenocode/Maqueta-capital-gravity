@@ -1044,7 +1044,7 @@ export default function App() {
                 </h2>
                 <div className="space-y-2">
                   {(() => {
-                    const { nodes } = getSectorData(activeScenario.id, activeScenario.macroRegime, activeScenario.sectorData);
+                    const { nodes } = getSectorData(activeScenario.id, activeScenario.macroRegime, activeScenario.sectorData, selectedCountry ?? undefined, activeScenario.countrySectorData);
                     return SECTORS.map(sector => {
                       const node = nodes.find(n => n.id === sector.id);
                       if (!node) return null;

@@ -84,6 +84,79 @@ const SECTOR_BASE: Record<string, SectorBase> = {
   utilities:          { liquidezBase: 70, spreadBase: 14, correlacion: 0.45 },
 };
 
+// ─── Country-specific sector tickers (price/volume signal per country) ────────
+// Each entry maps sectorId → ticker available on Yahoo Finance for that country.
+// Falls back to US ETF options pressure for sectors without a country ticker.
+const COUNTRY_SECTOR_SYMBOLS: Record<string, Record<string, string>> = {
+  'EE.UU.': {},  // uses SECTOR_SYMBOLS (US ETFs) directly
+  'Canadá': {
+    technology:         'XIT.TO',   // iShares S&P/TSX Capped Info Tech
+    energy:             'XEG.TO',   // iShares S&P/TSX Capped Energy
+    financial:          'XFN.TO',   // iShares S&P/TSX Capped Financials
+    basic_materials:    'XMA.TO',   // iShares S&P/TSX Global Mining
+    real_estate:        'XRE.TO',   // iShares S&P/TSX Capped REIT
+    cons_staples:       'XST.TO',   // iShares S&P/TSX Capped Consumer Staples
+    utilities:          'XUT.TO',   // iShares S&P/TSX Capped Utilities
+    industrials:        'ZIN.TO',   // BMO S&P/TSX Equal Weight Industrials
+  },
+  'Alemania': {
+    technology:         'SAP.DE',   // SAP (Xetra)
+    industrials:        'SIE.DE',   // Siemens
+    financial:          'DBK.DE',   // Deutsche Bank
+    healthcare:         'BAYN.DE',  // Bayer
+    energy:             'RWE.DE',   // RWE
+    cons_discretionary: 'BMW.DE',   // BMW
+    basic_materials:    'BASF.DE',  // BASF
+    utilities:          'EOAN.DE',  // E.ON
+    communication:      'DTE.DE',   // Deutsche Telekom
+  },
+  'Francia': {
+    technology:         'CAP.PA',   // Capgemini (Euronext Paris)
+    cons_discretionary: 'MC.PA',    // LVMH
+    financial:          'BNP.PA',   // BNP Paribas
+    healthcare:         'SAN.PA',   // Sanofi
+    energy:             'TTE.PA',   // TotalEnergies
+    industrials:        'AIR.PA',   // Airbus
+    cons_staples:       'OR.PA',    // L'Oreal
+    basic_materials:    'AI.PA',    // Air Liquide
+    communication:      'ORA.PA',   // Orange
+  },
+  'Italia': {
+    technology:         'STM.MI',   // STMicroelectronics (Borsa Italiana)
+    financial:          'ISP.MI',   // Intesa Sanpaolo
+    energy:             'ENI.MI',   // ENI
+    utilities:          'ENEL.MI',  // Enel
+    industrials:        'LDO.MI',   // Leonardo
+    healthcare:         'REC.MI',   // Recordati
+    cons_discretionary: 'STLA.MI',  // Stellantis
+    basic_materials:    'TEN.MI',   // Tenaris
+  },
+  'Japón': {
+    technology:         '6758.T',   // Sony (Tokyo)
+    industrials:        '7203.T',   // Toyota
+    financial:          '8306.T',   // Mitsubishi UFJ Financial
+    healthcare:         '4502.T',   // Takeda Pharmaceutical
+    cons_discretionary: '7974.T',   // Nintendo
+    energy:             '5020.T',   // ENEOS Holdings
+    basic_materials:    '5401.T',   // Nippon Steel
+    communication:      '9984.T',   // SoftBank Group
+    utilities:          '9501.T',   // Tokyo Electric Power
+    real_estate:        '8951.T',   // Japan Real Estate Investment
+  },
+  'Reino Unido': {
+    financial:          'HSBA.L',   // HSBC (London)
+    healthcare:         'AZN.L',    // AstraZeneca
+    energy:             'BP.L',     // BP
+    cons_staples:       'ULVR.L',   // Unilever
+    industrials:        'RR.L',     // Rolls-Royce
+    basic_materials:    'RIO.L',    // Rio Tinto
+    utilities:          'NG.L',     // National Grid
+    communication:      'VOD.L',    // Vodafone
+    real_estate:        'LAND.L',   // Land Securities
+  },
+  'Rusia': {},  // Moscow Exchange data unreliable via Yahoo Finance — uses static profiles
+};
+
 // ─── Country ETF symbols ──────────────────────────────────────────────────────
 const COUNTRY_ETF_SYMBOLS: Record<string, string | null> = {
   'EE.UU.':      null,
@@ -760,11 +833,12 @@ async function fetchInvestingNews(): Promise<RawNewsItem[]> {
 // ─── Main handler ─────────────────────────────────────────────────────────────
 export async function GET() {
   try {
-    const assetSyms   = Object.values(ASSET_SYMBOLS);
-    const sectorSyms  = Object.values(SECTOR_SYMBOLS);
-    const countrySyms = Object.values(COUNTRY_ETF_SYMBOLS).filter((s): s is string => s !== null);
-    const macroSyms   = ['^VIX', '^TNX', '^IRX', 'HYG', '^MOVE'];
-    const allSymbols  = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms])];
+    const assetSyms          = Object.values(ASSET_SYMBOLS);
+    const sectorSyms         = Object.values(SECTOR_SYMBOLS);
+    const countrySyms        = Object.values(COUNTRY_ETF_SYMBOLS).filter((s): s is string => s !== null);
+    const macroSyms          = ['^VIX', '^TNX', '^IRX', 'HYG', '^MOVE'];
+    const countrySectorSyms  = Object.values(COUNTRY_SECTOR_SYMBOLS).flatMap(m => Object.values(m));
+    const allSymbols         = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms, ...countrySectorSyms])];
 
     const [rawQuotes, yahooNews, investingNews, rawOptions] = await Promise.all([
       Promise.all(allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null))),
@@ -916,7 +990,21 @@ export async function GET() {
 
     for (const [countryName, etfSym] of Object.entries(COUNTRY_ETF_SYMBOLS)) {
       const countryQuote = etfSym ? (quoteMap[etfSym] ?? null) : null;
-      const nodes = computeCountrySectorNodes(pressuredGlobalNodes, countryQuote, countryName, macro, sectorPressures);
+
+      // Build country-specific sectorPressures: country price/vol signal (60%) + US options (40%).
+      // Sectors without a country-specific ticker fall back to the global US ETF pressure.
+      const countrySPs: Record<string, number> = { ...sectorPressures };
+      const countrySectorSymMap = COUNTRY_SECTOR_SYMBOLS[countryName] ?? {};
+      for (const [sectorId, ticker] of Object.entries(countrySectorSymMap)) {
+        const cq = quoteMap[ticker];
+        if (cq) {
+          const countryPricePressure = computeInstitutionalPressure(cq, regimeMult);
+          const usOptionsPressure    = optionsMap[SECTOR_SYMBOLS[sectorId] ?? '']?.optionsPressure ?? 0;
+          countrySPs[sectorId]       = clamp(countryPricePressure * 0.6 + usOptionsPressure * 0.4, -100, 100);
+        }
+      }
+
+      const nodes = computeCountrySectorNodes(pressuredGlobalNodes, countryQuote, countryName, macro, countrySPs);
       countrySectorData[countryName] = {
         nodes,
         flows: computeSectorFlowsCalibrated(nodes, zscoreFlows),
