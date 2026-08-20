@@ -103,6 +103,7 @@ export interface MarketScenario {
     nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
     flows: Array<{ from: string; to: string; strength: number }>;
   }>;
+  rotationSignal?: string;
   newsContext?: NewsContext;
 }
 

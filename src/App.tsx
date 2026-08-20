@@ -1225,6 +1225,20 @@ export default function App() {
             <h3 className="text-sm font-bold uppercase mb-2">
               {activeScenario.id === 'live' ? 'Justificación del Modelo' : 'Sentimiento del Mercado'}
             </h3>
+            {activeScenario.id === 'live' && activeScenario.rotationSignal && (
+              <div className="flex items-center gap-2 mb-3 p-2 rounded bg-ink/5 border border-ink/5">
+                <span className="text-[7px] font-mono text-ink/30 uppercase tracking-widest shrink-0">Rotación Sectorial</span>
+                <span className={cn(
+                  'text-[8px] font-mono font-bold uppercase tracking-widest',
+                  activeScenario.rotationSignal.includes('RISK-ON')    ? 'text-accent' :
+                  activeScenario.rotationSignal.includes('RISK-OFF')   ? 'text-danger' :
+                  activeScenario.rotationSignal.includes('VALUE')      ? 'text-yellow-400' :
+                  activeScenario.rotationSignal.includes('DEFENSIVO')  ? 'text-yellow-400' : 'text-ink/40'
+                )}>
+                  {activeScenario.rotationSignal}
+                </span>
+              </div>
+            )}
             <p className="text-[10px] font-mono text-ink/60 leading-relaxed mb-4">
               {activeScenario.id === 'live'
                 ? activeScenario.description

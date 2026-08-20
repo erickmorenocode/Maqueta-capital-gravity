@@ -560,6 +560,46 @@ function buildDescription(
   );
 }
 
+// ─── Rotation model (adapted from sector.py) ─────────────────────────────────
+function computeInstitutionalPressure(quote: YFQuote, regimeMult: number): number {
+  const price     = quote.regularMarketPrice        ?? 100;
+  const avg50     = quote.fiftyDayAverage           ?? price;
+  const changePct = quote.regularMarketChangePercent ?? 0;
+  const vol       = quote.regularMarketVolume       ?? 0;
+  const avgVol    = quote.averageDailyVolume3Month  ?? vol;
+
+  const momentum  = avg50 > 0 ? (price / avg50 - 1) * 200 : 0;
+  const volSurge  = avgVol > 0 ? (vol / avgVol - 1) * 30 : 0;
+  const dailyMove = changePct * 5;
+
+  return clamp((momentum * 0.5 + volSurge * 0.3 + dailyMove * 0.2) * regimeMult, -100, 100);
+}
+
+function computeSectorRotationSignal(
+  pressures: Record<string, number>,
+  auxPressures: { gold: number; bonds: number; norteAmerica: number },
+): { signal: string; regimeHint: 'risk-on' | 'risk-off' | 'value' | 'defensive' | 'mixed' } {
+  const avgOf = (...keys: string[]) => {
+    const vals = keys.map(k => pressures[k] ?? 0);
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  };
+  const growthScore    = (avgOf('technology', 'communication', 'cons_discretionary') + auxPressures.norteAmerica) / 2;
+  const defensiveScore = avgOf('cons_staples', 'healthcare');
+  const altScore       = (auxPressures.gold + auxPressures.bonds) / 2;
+  const energyScore    = pressures['energy']    ?? 0;
+  const finScore       = pressures['financial'] ?? 0;
+
+  if (growthScore > 20 && altScore < -5)
+    return { signal: 'RISK-ON · GROWTH',            regimeHint: 'risk-on'   };
+  if (altScore > 20 && growthScore < -5)
+    return { signal: 'RISK-OFF · REFUGIO',           regimeHint: 'risk-off'  };
+  if ((energyScore > 20 || finScore > 20) && growthScore < -5)
+    return { signal: 'ROTACIÓN VALUE',               regimeHint: 'value'     };
+  if (defensiveScore > 20 && growthScore < 0)
+    return { signal: 'DEFENSIVO · CAUTELA',          regimeHint: 'defensive' };
+  return   { signal: 'MIXTO · SIN TENDENCIA CLARA', regimeHint: 'mixed'     };
+}
+
 // ─── News: types + sentiment helpers ─────────────────────────────────────────
 interface RawNewsItem { title: string; source: string; publishedAt: number; }
 
@@ -744,13 +784,38 @@ export async function GET() {
       friccionRaw: clamp(raw.friccionRaw, 1, 30),
     }));
 
-    // sectorData = EE.UU. perspective — mean+0.5σ threshold
-    const usSectorRaw = globalNodes.map(({ id, masa, distancia }) => ({ id, masa, distancia }));
-    const usF     = usSectorRaw.map(n => n.masa - n.distancia);
+    // ── Rotation model: institutional pressure per sector ─────────────────────
+    const sectorPressures: Record<string, number> = {};
+    for (const [sectorId, sym] of Object.entries(SECTOR_SYMBOLS)) {
+      sectorPressures[sectorId] = computeInstitutionalPressure(quoteMap[sym] ?? {}, regimeMult);
+    }
+    const auxPressures = {
+      gold:         computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Gold']]          ?? {}, regimeMult),
+      bonds:        computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Bonds']]         ?? {}, regimeMult),
+      norteAmerica: computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Norte America']] ?? {}, regimeMult),
+    };
+    const rotationResult = computeSectorRotationSignal(sectorPressures, auxPressures);
+
+    // Apply institutional pressure bonus to MASA (±12 pts max)
+    const pressuredGlobalNodes = globalNodes.map(node => ({
+      ...node,
+      masa: clamp(node.masa + clamp((sectorPressures[node.id] ?? 0) / 8, -12, 12), 0, 100),
+    }));
+
+    // sectorData = EE.UU. — rotation-enhanced mean+0.5σ threshold
+    const usSectorRaw = pressuredGlobalNodes.map(({ id, masa, distancia }) => ({ id, masa, distancia }));
+    const usPressureAdj = usSectorRaw.map(n => ({
+      ...n,
+      adjustedForce: (n.masa - n.distancia) + clamp((sectorPressures[n.id] ?? 0) / 5, -15, 15),
+    }));
+    const usF     = usPressureAdj.map(n => n.adjustedForce);
     const usMean  = usF.reduce((a, b) => a + b, 0) / usF.length;
     const usSigma = Math.sqrt(usF.reduce((a, b) => a + (b - usMean) ** 2, 0) / usF.length);
     const usHighT = usMean + 0.5 * usSigma;
-    const usSectorNodes = usSectorRaw.map(n => ({ ...n, isGravityCenter: (n.masa - n.distancia) >= usHighT }));
+    const usSectorNodes = usPressureAdj.map(n => ({
+      id: n.id, masa: n.masa, distancia: n.distancia,
+      isGravityCenter: n.adjustedForce >= usHighT,
+    }));
     const usSectorFlows = computeSectorFlowsCalibrated(usSectorNodes, zscoreFlows);
 
     // ── Per-country sector data ────────────────────────────────────────────────
@@ -761,7 +826,7 @@ export async function GET() {
 
     for (const [countryName, etfSym] of Object.entries(COUNTRY_ETF_SYMBOLS)) {
       const countryQuote = etfSym ? (quoteMap[etfSym] ?? null) : null;
-      const nodes = computeCountrySectorNodes(globalNodes, countryQuote, countryName, macro);
+      const nodes = computeCountrySectorNodes(pressuredGlobalNodes, countryQuote, countryName, macro);
       countrySectorData[countryName] = {
         nodes,
         flows: computeSectorFlowsCalibrated(nodes, zscoreFlows),
@@ -787,6 +852,7 @@ export async function GET() {
       sectorData:       { nodes: usSectorNodes, flows: usSectorFlows },
       countrySectorData,
       lastUpdated:      Date.now(),
+      rotationSignal:   rotationResult.signal,
       newsContext: {
         headlines:      newsHeadlines,
         sentimentScore: newsSentimentScore,
