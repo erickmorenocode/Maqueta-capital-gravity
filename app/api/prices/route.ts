@@ -14,7 +14,7 @@ const symbols: Record<string, string> = {
   dxy: 'DX-Y.NYB',
   gold: 'GC=F',
   btc: 'BTC-USD',
-  nasdaq: '^IXIC',
+  nasdaq: '^NDX',
   dowjones: '^DJI',
   sp500: '^GSPC',
   wti: 'CL=F',
