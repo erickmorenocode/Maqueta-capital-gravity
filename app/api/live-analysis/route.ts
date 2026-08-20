@@ -670,8 +670,8 @@ Sé específico con los números del modelo. Conecta cada conclusión con datos 
     console.log('[AI] Calling Gemini gemini-2.0-flash, key present:', !!apiKey);
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: 'models/gemini-2.5-flash',
-      contents: prompt,
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
     const text = response.text?.trim();
     console.log('[AI] Response length:', text?.length ?? 0);
