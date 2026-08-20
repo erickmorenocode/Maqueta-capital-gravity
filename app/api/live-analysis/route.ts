@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
+import { GoogleGenAI } from '@google/genai';
 import type { MarketScenario, GravityMetrics, CapitalFlow } from '@/src/data';
 
 export const dynamic = 'force-dynamic';
@@ -611,6 +612,73 @@ function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
 }
 
 // ─── Human-readable description ───────────────────────────────────────────────
+async function generateAIDescription(
+  regime: string,
+  vix: number,
+  us10y: number,
+  gravityCenters: string[],
+  metrics: Record<string, GravityMetrics>,
+  headlines: Array<{ title: string; source: string; sentiment: string }>,
+  assetPressures: Record<string, number>,
+  rotationSignal: string,
+): Promise<string> {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return buildDescription(regime, vix, us10y, gravityCenters, metrics);
+
+    const gcDetails = gravityCenters.length
+      ? gravityCenters.map(id => {
+          const m = metrics[id];
+          if (!m) return `${id}: sin datos`;
+          return `${id}: MASA=${m.masa} · distancia=${m.distancia} · G=${m.fuerzaG?.toFixed(2) ?? 'n/a'} · presión_institucional=${(assetPressures[id] ?? 0).toFixed(0)}`;
+        }).join('\n')
+      : 'Ninguno supera el umbral dinámico (media+0.5σ)';
+
+    const allAssetsRanked = Object.entries(metrics)
+      .sort((a, b) => (b[1].fuerzaG ?? 0) - (a[1].fuerzaG ?? 0))
+      .map(([id, m]) => `${id}: MASA=${m.masa} d=${m.distancia} G=${m.fuerzaG?.toFixed(2) ?? 'n/a'}`)
+      .join(' | ');
+
+    const newsText = headlines.slice(0, 10)
+      .map(h => `[${h.sentiment.toUpperCase()}] ${h.title} — ${h.source}`)
+      .join('\n');
+
+    const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+    const prompt = `Eres un analista cuantitativo de mercados financieros especializado en el modelo de Gravedad de Capital (G = (MASA − distancia) / fricción).
+
+FECHA: ${today}
+RÉGIMEN MACRO: ${regime.toUpperCase()} | VIX: ${vix.toFixed(1)} | US10Y: ${us10y.toFixed(2)}% | Rotación: ${rotationSignal}
+
+CENTROS DE GRAVEDAD ACTUALES (activos con G ≥ media+0.5σ del escenario):
+${gcDetails}
+
+TODOS LOS ACTIVOS RANKEADOS POR FUERZA G:
+${allAssetsRanked}
+
+NOTICIAS DEL DÍA (${headlines.length} titulares analizados):
+${newsText}
+
+Escribe un análisis en español de 4 párrafos cortos. Cada párrafo separado por una línea en blanco. Sin markdown, sin viñetas, sin encabezados.
+
+Párrafo 1 — Interpretación de noticias: qué narrativa macroeconómica emergen de los titulares y cómo afectan el sentimiento de mercado hoy.
+Párrafo 2 — Justificación de centros de gravedad: explica por qué exactamente esos activos/mercados están atrayendo capital HOY, citando sus valores MASA/distancia/G y conectándolos con las noticias relevantes.
+Párrafo 3 — Activos que pierden capital: cuáles tienen la menor Fuerza G, por qué el capital sale de ahí, y qué noticias o métricas lo explican.
+Párrafo 4 — Posicionamiento estratégico: qué sugiere el modelo para el posicionamiento de capital en las próximas horas/días, dado el régimen ${regime} y las señales actuales.
+
+Sé específico con los números del modelo. Conecta cada conclusión con datos concretos.`;
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: prompt,
+    });
+    const text = response.text?.trim();
+    return text || buildDescription(regime, vix, us10y, gravityCenters, metrics);
+  } catch {
+    return buildDescription(regime, vix, us10y, gravityCenters, metrics);
+  }
+}
+
 function buildDescription(
   regime: string,
   vix: number,
@@ -1069,10 +1137,15 @@ export async function GET() {
     }));
     const newsSentiment = titleSentiment(newsAvgScore > 0.5 ? 1 : newsAvgScore < -0.5 ? -1 : 0);
 
+    const aiDescription = await generateAIDescription(
+      regime, vix, us10y, gravityCenters, metrics,
+      newsHeadlines, assetPressures, rotationResult.signal,
+    );
+
     const scenario: MarketScenario = {
       id:               'live',
       name:             'Realidad del Mercado en Vivo',
-      description:      buildDescription(regime, vix, us10y, gravityCenters, metrics),
+      description:      aiDescription,
       macroRegime:      regime,
       regimeWeights:    weights,
       gravityCenters,
