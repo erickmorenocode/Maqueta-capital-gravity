@@ -1135,16 +1135,23 @@ export default function App() {
                 <div className="space-y-2">
                   {(() => {
                     const { nodes } = getSectorData(activeScenario.id, activeScenario.macroRegime, activeScenario.sectorData, selectedCountry ?? undefined, activeScenario.countrySectorData);
+                    // 3-tier thresholds mirror WorldMap: mean ± 0.5σ of (M−d)
+                    const forces = nodes.map(n => n.masa - n.distancia);
+                    const fMean  = forces.reduce((a, b) => a + b, 0) / Math.max(1, forces.length);
+                    const fSigma = Math.sqrt(forces.reduce((a, b) => a + (b - fMean) ** 2, 0) / Math.max(1, forces.length));
+                    const highT  = fMean + 0.5 * fSigma;
+                    const lowT   = fMean - 0.5 * fSigma;
                     return SECTORS.map(sector => {
                       const node = nodes.find(n => n.id === sector.id);
                       if (!node) return null;
-                      const fuerza = (node.masa - node.distancia) / 10;
+                      const force  = node.masa - node.distancia;
+                      const fuerza = force / 10;
                       const isSelected = selectedSectorId === sector.id;
                       const comps = deriveSectorComponents(node.masa, node.distancia);
-                      let statusLabel = 'BAJA';
-                      let valueColor = 'text-danger';
-                      if (fuerza > 8) { statusLabel = 'ALTA'; valueColor = 'text-accent'; }
-                      else if (fuerza >= 2) { statusLabel = 'MEDIA'; valueColor = 'text-ink/60'; }
+                      let statusLabel = 'MEDIA';
+                      let valueColor = 'text-ink/60';
+                      if (force >= highT) { statusLabel = 'ALTA'; valueColor = 'text-accent'; }
+                      else if (force <= lowT) { statusLabel = 'BAJA'; valueColor = 'text-danger'; }
 
                       return (
                         <button
