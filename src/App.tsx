@@ -573,7 +573,7 @@ export default function App() {
               {activeScenario.id === 'live' ? 'Análisis en Vivo' : 'Análisis del Escenario'}
             </h2>
             <div className="space-y-3">
-              <div className="p-3 rounded bg-surface/60 border border-ink/5 max-h-[45vh] overflow-y-auto custom-scrollbar">
+              <div className="p-3 rounded bg-surface/60 border border-ink/5">
                 {activeScenario.description
                   ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
                       <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
