@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
 import { GoogleGenAI } from '@google/genai';
 import type { MarketScenario, GravityMetrics, CapitalFlow } from '@/src/data';
 
 export const dynamic = 'force-dynamic';
 
-// ─── Extended YFQuote interface ───────────────────────────────────────────────
+// â”€â”€â”€ Extended YFQuote interface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface YFQuote {
   regularMarketPrice?: number;
   regularMarketChangePercent?: number;
@@ -29,7 +29,7 @@ interface YFQuote {
 
 const yf = new YahooFinance();
 
-// ─── Asset symbols ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Asset symbols â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ASSET_SYMBOLS: Record<string, string> = {
   USD:                'DX-Y.NYB',
   Europe:             'EZU',
@@ -55,7 +55,7 @@ const ASSET_BASE: Record<string, AssetBase> = {
   Oil:                { liquidez: 80, friccion: 10, correlacion: 0.60, spreadBase: 20 },
 };
 
-// ─── Sector ETF symbols ───────────────────────────────────────────────────────
+// â”€â”€â”€ Sector ETF symbols â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SECTOR_SYMBOLS: Record<string, string> = {
   technology:         'XLK',
   communication:      'XLC',
@@ -85,12 +85,12 @@ const SECTOR_BASE: Record<string, SectorBase> = {
   utilities:          { liquidezBase: 70, spreadBase: 14, correlacion: 0.45 },
 };
 
-// ─── Country-specific sector tickers (price/volume signal per country) ────────
-// Each entry maps sectorId → ticker available on Yahoo Finance for that country.
+// â”€â”€â”€ Country-specific sector tickers (price/volume signal per country) â”€â”€â”€â”€â”€â”€â”€â”€
+// Each entry maps sectorId â†’ ticker available on Yahoo Finance for that country.
 // Falls back to US ETF options pressure for sectors without a country ticker.
 const COUNTRY_SECTOR_SYMBOLS: Record<string, Record<string, string>> = {
   'EE.UU.': {},  // uses SECTOR_SYMBOLS (US ETFs) directly
-  'Canadá': {
+  'CanadÃ¡': {
     technology:         'XIT.TO',   // iShares S&P/TSX Capped Info Tech
     energy:             'XEG.TO',   // iShares S&P/TSX Capped Energy
     financial:          'XFN.TO',   // iShares S&P/TSX Capped Financials
@@ -132,7 +132,7 @@ const COUNTRY_SECTOR_SYMBOLS: Record<string, Record<string, string>> = {
     cons_discretionary: 'STLA.MI',  // Stellantis
     basic_materials:    'TEN.MI',   // Tenaris
   },
-  'Japón': {
+  'JapÃ³n': {
     technology:         '6758.T',   // Sony (Tokyo)
     industrials:        '7203.T',   // Toyota
     financial:          '8306.T',   // Mitsubishi UFJ Financial
@@ -155,54 +155,54 @@ const COUNTRY_SECTOR_SYMBOLS: Record<string, Record<string, string>> = {
     communication:      'VOD.L',    // Vodafone
     real_estate:        'LAND.L',   // Land Securities
   },
-  'Rusia': {},  // Moscow Exchange data unreliable via Yahoo Finance — uses static profiles
+  'Rusia': {},  // Moscow Exchange data unreliable via Yahoo Finance â€” uses static profiles
 };
 
-// ─── Country ETF symbols ──────────────────────────────────────────────────────
+// â”€â”€â”€ Country ETF symbols â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const COUNTRY_ETF_SYMBOLS: Record<string, string | null> = {
   'EE.UU.':      null,
-  'Canadá':      'EWC',
+  'CanadÃ¡':      'EWC',
   'Francia':     'EWQ',
   'Alemania':    'EWG',
   'Italia':      'EWI',
-  'Japón':       'EWJ',
+  'JapÃ³n':       'EWJ',
   'Reino Unido': 'EWU',
   'Rusia':       'ERUS',
 };
 
-// ─── Static country tables ────────────────────────────────────────────────────
-// S&P/Moody's credit ratings → [0-100]
+// â”€â”€â”€ Static country tables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// S&P/Moody's credit ratings â†’ [0-100]
 const COUNTRY_CREDIT_RATINGS: Record<string, number> = {
   'EE.UU.':      85,
-  'Canadá':      90,
+  'CanadÃ¡':      90,
   'Francia':     78,
   'Alemania':    95,
   'Italia':      65,
-  'Japón':       80,
+  'JapÃ³n':       80,
   'Reino Unido': 82,
   'Rusia':       35,
 };
 
-// World Bank political stability → [0-100, higher = more stable]
+// World Bank political stability â†’ [0-100, higher = more stable]
 const COUNTRY_POLITICAL_STABILITY: Record<string, number> = {
   'EE.UU.':      70,
-  'Canadá':      85,
+  'CanadÃ¡':      85,
   'Francia':     68,
   'Alemania':    82,
   'Italia':      60,
-  'Japón':       84,
+  'JapÃ³n':       84,
   'Reino Unido': 72,
   'Rusia':       25,
 };
 
-// IMF/WB capital controls → [0-30, higher = more restricted]
+// IMF/WB capital controls â†’ [0-30, higher = more restricted]
 const COUNTRY_CAPITAL_CONTROLS: Record<string, number> = {
   'EE.UU.':      0,
-  'Canadá':      0,
+  'CanadÃ¡':      0,
   'Francia':     1,
   'Alemania':    1,
   'Italia':      2,
-  'Japón':       3,
+  'JapÃ³n':       3,
   'Reino Unido': 0,
   'Rusia':       22,
 };
@@ -210,11 +210,11 @@ const COUNTRY_CAPITAL_CONTROLS: Record<string, number> = {
 // Transaction costs [% of trade value]
 const COUNTRY_TRANSACTION_COSTS: Record<string, number> = {
   'EE.UU.':      0.05,
-  'Canadá':      0.10,
+  'CanadÃ¡':      0.10,
   'Francia':     0.12,
   'Alemania':    0.12,
   'Italia':      0.15,
-  'Japón':       0.18,
+  'JapÃ³n':       0.18,
   'Reino Unido': 0.13,
   'Rusia':       0.40,
 };
@@ -222,11 +222,11 @@ const COUNTRY_TRANSACTION_COSTS: Record<string, number> = {
 // CPI annual approx 2024-2025 [%]
 const COUNTRY_CPI: Record<string, number> = {
   'EE.UU.':      3.2,
-  'Canadá':      2.9,
+  'CanadÃ¡':      2.9,
   'Francia':     2.3,
   'Alemania':    2.5,
   'Italia':      1.8,
-  'Japón':       2.8,
+  'JapÃ³n':       2.8,
   'Reino Unido': 3.5,
   'Rusia':       9.0,
 };
@@ -238,7 +238,7 @@ const G8_SECTOR_PROFILES: Record<string, Record<string, number>> = {
     energy: 78, financial: 90, healthcare: 87, industrials: 82,
     real_estate: 80, basic_materials: 75, utilities: 72,
   },
-  'Canadá': {
+  'CanadÃ¡': {
     technology: 42, communication: 48, cons_discretionary: 45, cons_staples: 60,
     energy: 90, financial: 78, healthcare: 52, industrials: 60,
     real_estate: 72, basic_materials: 85, utilities: 58,
@@ -258,7 +258,7 @@ const G8_SECTOR_PROFILES: Record<string, Record<string, number>> = {
     energy: 52, financial: 65, healthcare: 60, industrials: 78,
     real_estate: 68, basic_materials: 55, utilities: 62,
   },
-  'Japón': {
+  'JapÃ³n': {
     technology: 82, communication: 65, cons_discretionary: 80, cons_staples: 70,
     energy: 30, financial: 60, healthcare: 72, industrials: 92,
     real_estate: 52, basic_materials: 65, utilities: 48,
@@ -275,7 +275,7 @@ const G8_SECTOR_PROFILES: Record<string, Record<string, number>> = {
   },
 };
 
-// ─── Regime weights ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Regime weights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const REGIME_WEIGHTS: Record<string, { w1: number; w2: number; w3: number; w4: number }> = {
   'risk-on':  { w1: 0.40, w2: 0.35, w3: 0.15, w4: 0.10 },
   'risk-off': { w1: 0.15, w2: 0.10, w3: 0.35, w4: 0.40 },
@@ -287,7 +287,7 @@ function clamp(val: number, min: number, max: number) {
   return Math.min(max, Math.max(min, val));
 }
 
-// ─── Macro context passed to sector functions ─────────────────────────────────
+// â”€â”€â”€ Macro context passed to sector functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface MacroContext {
   vix: number;
   us10y: number;
@@ -298,7 +298,7 @@ interface MacroContext {
   regimeMult: number;
 }
 
-// ─── Asset metrics (unchanged) ────────────────────────────────────────────────
+// â”€â”€â”€ Asset metrics (unchanged) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface RawAssetMetrics extends GravityMetrics { distanciaRaw: number; changePercent: number; }
 
 function computeAssetMetrics(
@@ -354,14 +354,14 @@ function computeAssetMetrics(
     fuerzaG:                0,
     zscoreFlows:            parseFloat((changePct / 2).toFixed(2)),
     masaJustificacion:      `Ret=${retorno}(52s) Daily=${dailyReturn}(${changePct.toFixed(1)}%) Crec=${crecimiento} Liq=${liquidezActivo} Conf=${confianza}`,
-    distanciaJustificacion: `Vol52s=${annualRange.toFixed(1)}%×VIX=${vix.toFixed(1)} → vol=${volatilidad}, spr=${spread}`,
-    friccionJustificacion:  `F_base=${base.friccion}×${fricMult}=${friccion}`,
+    distanciaJustificacion: `Vol52s=${annualRange.toFixed(1)}%Ã—VIX=${vix.toFixed(1)} â†’ vol=${volatilidad}, spr=${spread}`,
+    friccionJustificacion:  `F_base=${base.friccion}Ã—${fricMult}=${friccion}`,
     distanciaRaw,
     changePercent: changePct,
   };
 }
 
-// ─── Sector metrics with full MASA/DISTANCIA/FRICCION ────────────────────────
+// â”€â”€â”€ Sector metrics with full MASA/DISTANCIA/FRICCION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface RawSectorMetric { masa: number; distanciaRaw: number; friccionRaw: number; }
 
 function computeSectorMetric(
@@ -382,7 +382,7 @@ function computeSectorMetric(
   const midPrice = (high52 + low52) / 2;
   const annualRange = midPrice > 0 ? (rangeW / midPrice) * 100 : 20;
 
-  // ── MASA: M = w1(Return) + w2(Growth) + w3(Liquidity) + w4(Confidence) ──────
+  // â”€â”€ MASA: M = w1(Return) + w2(Growth) + w3(Liquidity) + w4(Confidence) â”€â”€â”€â”€â”€â”€
   const priceReturn   = Math.round(rangeW > 0 ? clamp((price - low52) / rangeW * 100, 0, 100) : 50);
   const priceMomentum = Math.round(clamp((price / (avg50 || price) - 1) * 300 + 50, 0, 100));
   const dailyReturn   = Math.round(clamp(50 + changePct * 5, 0, 100));
@@ -410,7 +410,7 @@ function computeSectorMetric(
     0, 100
   ));
 
-  // ── DISTANCIA: r = Volatilidad + Spread + (1 - Correlacion) ─────────────────
+  // â”€â”€ DISTANCIA: r = Volatilidad + Spread + (1 - Correlacion) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const impliedVol  = annualRange * (macro.vix / 20) * 0.4;
   const histVol     = annualRange * 0.35;
   const moveContrib = macro.move > 0 ? macro.move / 100 * 5 : 2;
@@ -427,7 +427,7 @@ function computeSectorMetric(
 
   const distanciaRaw = Volatilidad + Spread + correlEffect;
 
-  // ── FRICCION: F = BidAsk + TxCost + CapControl + Slippage - LiqBonus ────────
+  // â”€â”€ FRICCION: F = BidAsk + TxCost + CapControl + Slippage - LiqBonus â”€â”€â”€â”€â”€â”€â”€â”€
   const bidAskRaw = quote.bid && quote.ask && quote.bid > 0 && price > 0
     ? (quote.ask - quote.bid) / price * 100 * 20
     : base.spreadBase * 0.1;
@@ -446,7 +446,7 @@ function computeSectorMetric(
   return { masa, distanciaRaw, friccionRaw };
 }
 
-// ─── Country sector nodes (country ETF overlay on global sectors) ─────────────
+// â”€â”€â”€ Country sector nodes (country ETF overlay on global sectors) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function computeCountrySectorNodes(
   globalNodes: Array<{ id: string; masa: number; distancia: number; friccionRaw: number }>,
   countryQuote: YFQuote | null,
@@ -506,12 +506,12 @@ function computeCountrySectorNodes(
     const domFactor = profile ? (profile[node.id] ?? 50) / 100 : 0.5;
 
     // Sector-specific country signal: dominant sectors get full country signal,
-    // non-dominant sectors are pulled toward a neutral floor (30) — they barely
+    // non-dominant sectors are pulled toward a neutral floor (30) â€” they barely
     // exist in the local economy so the country ETF move barely affects them.
     const sectorCountrySignal = countryMasaSignal * domFactor + 30 * (1 - domFactor);
 
-    // MASA: strong country blend (70%) + structural dominance bonus (±20pts)
-    // domMasaBonus: dom=0.98 → +19.2, dom=0.50 → 0, dom=0.30 → -8
+    // MASA: strong country blend (70%) + structural dominance bonus (Â±20pts)
+    // domMasaBonus: dom=0.98 â†’ +19.2, dom=0.50 â†’ 0, dom=0.30 â†’ -8
     const domMasaBonus = (domFactor - 0.5) * 40;
     const masa = Math.round(clamp(
       node.masa * (1 - domFactor * 0.70) + sectorCountrySignal * domFactor * 0.70 + domMasaBonus,
@@ -519,7 +519,7 @@ function computeCountrySectorNodes(
     ));
 
     // DISTANCIA: non-dominant sectors get heavy distance penalty (up to +50 pts)
-    // Dom=0.98 → penalty=1, dom=0.50 → penalty=25, dom=0.30 → penalty=35
+    // Dom=0.98 â†’ penalty=1, dom=0.50 â†’ penalty=25, dom=0.30 â†’ penalty=35
     const domDistanciaAdj = (1 - domFactor) * 50;
     const distancia = Math.round(clamp(
       node.distancia * 0.40 + countryRisk * 0.30 + domDistanciaAdj,
@@ -532,7 +532,7 @@ function computeCountrySectorNodes(
     return { id: node.id, masa, distancia, friccion, domFactor };
   });
 
-  // mean+0.5σ threshold — rotation-enhanced, pressure weighted by country sector dominance
+  // mean+0.5Ïƒ threshold â€” rotation-enhanced, pressure weighted by country sector dominance
   const sForces = rawNodes.map(n => {
     const pressureContrib = clamp((sectorPressures[n.id] ?? 0) / 5, -15, 15) * n.domFactor;
     return (n.masa - n.distancia) + pressureContrib;
@@ -543,8 +543,8 @@ function computeCountrySectorNodes(
   return rawNodes.map((n, i) => ({ id: n.id, masa: n.masa, distancia: n.distancia, isGravityCenter: sForces[i] >= sHighT }));
 }
 
-// ─── Sector flows with Z-score calibration ────────────────────────────────────
-// FlowFinal = FlowTheoretical × (1 + ZscoreFlows)
+// â”€â”€â”€ Sector flows with Z-score calibration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// FlowFinal = FlowTheoretical Ã— (1 + ZscoreFlows)
 function computeSectorFlowsCalibrated(
   nodes: Array<{ id: string; masa: number; distancia: number }>,
   zscoreFlows: number,
@@ -577,7 +577,7 @@ function computeSectorFlowsCalibrated(
   }));
 }
 
-// ─── Asset flows ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Asset flows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
   const rawFlows: Array<{
     from: string; to: string;
@@ -607,11 +607,11 @@ function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
     flowTheoretical: parseFloat(flowTheoretical.toFixed(3)),
     flowFinal:       parseFloat(flowFinal.toFixed(3)),
     zscoreAdjustment,
-    label: `Flujo ${from} → ${to} (FG: ${(metrics[to].fuerzaG ?? 0).toFixed(1)})`,
+    label: `Flujo ${from} â†’ ${to} (FG: ${(metrics[to].fuerzaG ?? 0).toFixed(1)})`,
   }));
 }
 
-// ─── Human-readable description ───────────────────────────────────────────────
+// â”€â”€â”€ Human-readable description â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function generateAIDescription(
   regime: string,
   vix: number,
@@ -630,9 +630,9 @@ async function generateAIDescription(
       ? gravityCenters.map(id => {
           const m = metrics[id];
           if (!m) return `${id}: sin datos`;
-          return `${id}: MASA=${m.masa} · distancia=${m.distancia} · G=${m.fuerzaG?.toFixed(2) ?? 'n/a'} · presión_institucional=${(assetPressures[id] ?? 0).toFixed(0)}`;
+          return `${id}: MASA=${m.masa} Â· distancia=${m.distancia} Â· G=${m.fuerzaG?.toFixed(2) ?? 'n/a'} Â· presiÃ³n_institucional=${(assetPressures[id] ?? 0).toFixed(0)}`;
         }).join('\n')
-      : 'Ninguno supera el umbral dinámico (media+0.5σ)';
+      : 'Ninguno supera el umbral dinÃ¡mico (media+0.5Ïƒ)';
 
     const allAssetsRanked = Object.entries(metrics)
       .sort((a, b) => (b[1].fuerzaG ?? 0) - (a[1].fuerzaG ?? 0))
@@ -640,38 +640,38 @@ async function generateAIDescription(
       .join(' | ');
 
     const newsText = headlines.slice(0, 10)
-      .map(h => `[${h.sentiment.toUpperCase()}] ${h.title} — ${h.source}`)
+      .map(h => `[${h.sentiment.toUpperCase()}] ${h.title} â€” ${h.source}`)
       .join('\n');
 
     const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
-    const prompt = `Eres un analista cuantitativo de mercados financieros especializado en el modelo de Gravedad de Capital (G = (MASA − distancia) / fricción).
+    const prompt = `Eres un analista cuantitativo de mercados financieros especializado en el modelo de Gravedad de Capital (G = (MASA âˆ’ distancia) / fricciÃ³n).
 
 FECHA: ${today}
-RÉGIMEN MACRO: ${regime.toUpperCase()} | VIX: ${vix.toFixed(1)} | US10Y: ${us10y.toFixed(2)}% | Rotación: ${rotationSignal}
+RÃ‰GIMEN MACRO: ${regime.toUpperCase()} | VIX: ${vix.toFixed(1)} | US10Y: ${us10y.toFixed(2)}% | RotaciÃ³n: ${rotationSignal}
 
-CENTROS DE GRAVEDAD ACTUALES (activos con G ≥ media+0.5σ del escenario):
+CENTROS DE GRAVEDAD ACTUALES (activos con G â‰¥ media+0.5Ïƒ del escenario):
 ${gcDetails}
 
 TODOS LOS ACTIVOS RANKEADOS POR FUERZA G:
 ${allAssetsRanked}
 
-NOTICIAS DEL DÍA (${headlines.length} titulares analizados):
+NOTICIAS DEL DÃA (${headlines.length} titulares analizados):
 ${newsText}
 
-Escribe un análisis en español de 4 párrafos cortos. Cada párrafo separado por una línea en blanco. Sin markdown, sin viñetas, sin encabezados.
+Escribe un anÃ¡lisis en espaÃ±ol de 4 pÃ¡rrafos cortos. Cada pÃ¡rrafo separado por una lÃ­nea en blanco. Sin markdown, sin viÃ±etas, sin encabezados.
 
-Párrafo 1 — Interpretación de noticias: qué narrativa macroeconómica emergen de los titulares y cómo afectan el sentimiento de mercado hoy.
-Párrafo 2 — Justificación de centros de gravedad: explica por qué exactamente esos activos/mercados están atrayendo capital HOY, citando sus valores MASA/distancia/G y conectándolos con las noticias relevantes.
-Párrafo 3 — Activos que pierden capital: cuáles tienen la menor Fuerza G, por qué el capital sale de ahí, y qué noticias o métricas lo explican.
-Párrafo 4 — Posicionamiento estratégico: qué sugiere el modelo para el posicionamiento de capital en las próximas horas/días, dado el régimen ${regime} y las señales actuales.
+PÃ¡rrafo 1 â€” InterpretaciÃ³n de noticias: quÃ© narrativa macroeconÃ³mica emergen de los titulares y cÃ³mo afectan el sentimiento de mercado hoy.
+PÃ¡rrafo 2 â€” JustificaciÃ³n de centros de gravedad: explica por quÃ© exactamente esos activos/mercados estÃ¡n atrayendo capital HOY, citando sus valores MASA/distancia/G y conectÃ¡ndolos con las noticias relevantes.
+PÃ¡rrafo 3 â€” Activos que pierden capital: cuÃ¡les tienen la menor Fuerza G, por quÃ© el capital sale de ahÃ­, y quÃ© noticias o mÃ©tricas lo explican.
+PÃ¡rrafo 4 â€” Posicionamiento estratÃ©gico: quÃ© sugiere el modelo para el posicionamiento de capital en las prÃ³ximas horas/dÃ­as, dado el rÃ©gimen ${regime} y las seÃ±ales actuales.
 
-Sé específico con los números del modelo. Conecta cada conclusión con datos concretos.`;
+SÃ© especÃ­fico con los nÃºmeros del modelo. Conecta cada conclusiÃ³n con datos concretos.`;
 
     console.log('[AI] Calling Gemini gemini-2.0-flash, key present:', !!apiKey);
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      model: 'gemini-3.6-flash',
+      contents: [{ role: 'user' as const, parts: [{ text: prompt }] }],
     });
     const text = response.text?.trim();
     console.log('[AI] Response length:', text?.length ?? 0);
@@ -691,10 +691,10 @@ function buildDescription(
   metrics: Record<string, GravityMetrics>,
 ): string {
   const regimeLabel: Record<string, string> = {
-    'risk-on':  'EXPANSIÓN — apetito de riesgo alto',
-    'risk-off': 'DEFENSIVO — inversores buscan seguridad',
-    'crisis':   'CRISIS — capital huye hacia refugios',
-    'neutral':  'NEUTRAL — señales mixtas sin tendencia clara',
+    'risk-on':  'EXPANSIÃ“N â€” apetito de riesgo alto',
+    'risk-off': 'DEFENSIVO â€” inversores buscan seguridad',
+    'crisis':   'CRISIS â€” capital huye hacia refugios',
+    'neutral':  'NEUTRAL â€” seÃ±ales mixtas sin tendencia clara',
   };
   const losers    = Object.entries(metrics)
     .sort((a, b) => (a[1].fuerzaG ?? 0) - (b[1].fuerzaG ?? 0))
@@ -705,11 +705,11 @@ function buildDescription(
     `Mercados en modo ${regimeLabel[regime] ?? regime.toUpperCase()}. ` +
     `Capital gravitando hacia: ${topText}. ` +
     `Salida de flujos desde: ${losers.join(' y ')}. ` +
-    `VIX ${vix.toFixed(1)} · US10Y ${us10y.toFixed(2)}%.`
+    `VIX ${vix.toFixed(1)} Â· US10Y ${us10y.toFixed(2)}%.`
   );
 }
 
-// ─── Rotation model (adapted from sector.py) ─────────────────────────────────
+// â”€â”€â”€ Rotation model (adapted from sector.py) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function computeInstitutionalPressure(quote: YFQuote, regimeMult: number): number {
   const price     = quote.regularMarketPrice        ?? 100;
   const avg50     = quote.fiftyDayAverage           ?? price;
@@ -739,17 +739,17 @@ function computeSectorRotationSignal(
   const finScore       = pressures['financial'] ?? 0;
 
   if (growthScore > 20 && altScore < -5)
-    return { signal: 'RISK-ON · GROWTH',            regimeHint: 'risk-on'   };
+    return { signal: 'RISK-ON Â· GROWTH',            regimeHint: 'risk-on'   };
   if (altScore > 20 && growthScore < -5)
-    return { signal: 'RISK-OFF · REFUGIO',           regimeHint: 'risk-off'  };
+    return { signal: 'RISK-OFF Â· REFUGIO',           regimeHint: 'risk-off'  };
   if ((energyScore > 20 || finScore > 20) && growthScore < -5)
-    return { signal: 'ROTACIÓN VALUE',               regimeHint: 'value'     };
+    return { signal: 'ROTACIÃ“N VALUE',               regimeHint: 'value'     };
   if (defensiveScore > 20 && growthScore < 0)
-    return { signal: 'DEFENSIVO · CAUTELA',          regimeHint: 'defensive' };
-  return   { signal: 'MIXTO · SIN TENDENCIA CLARA', regimeHint: 'mixed'     };
+    return { signal: 'DEFENSIVO Â· CAUTELA',          regimeHint: 'defensive' };
+  return   { signal: 'MIXTO Â· SIN TENDENCIA CLARA', regimeHint: 'mixed'     };
 }
 
-// ─── Options: Black-Scholes gamma → real GEX + PCR ───────────────────────────
+// â”€â”€â”€ Options: Black-Scholes gamma â†’ real GEX + PCR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface OptionsMetrics {
   netGex:          number;
   putCallRatio:    number;
@@ -832,7 +832,7 @@ async function fetchOptionsMetrics(sym: string): Promise<OptionsMetrics> {
   } catch { return OPTIONS_ZERO; }
 }
 
-// ─── News: types + sentiment helpers ─────────────────────────────────────────
+// â”€â”€â”€ News: types + sentiment helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface RawNewsItem { title: string; source: string; publishedAt: number; url?: string; }
 
 const CRISIS_WORDS  = ['bank run','bailout','emergency','systemic','sovereign debt','margin call','liquidity crisis','circuit breaker'];
@@ -908,7 +908,7 @@ async function fetchInvestingNews(): Promise<RawNewsItem[]> {
   } catch { return []; }
 }
 
-// ─── Main handler ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function GET() {
   try {
     const assetSyms          = Object.values(ASSET_SYMBOLS);
@@ -946,7 +946,7 @@ export async function GET() {
       ? clamp((1 - (hygQ.regularMarketPrice ?? hygHigh52) / hygHigh52) * 100, 0, 50)
       : 10;
 
-    // ── News sentiment ──────────────────────────────────────────────────────────
+    // â”€â”€ News sentiment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const allNewsRaw = [...yahooNews, ...investingNews]
       .sort((a, b) => b.publishedAt - a.publishedAt)
       .slice(0, 12);
@@ -985,8 +985,8 @@ export async function GET() {
     const zCurve   = clamp((us10y - us2y) / 2, -0.5, 1.0);
     const zscoreFlows = zDXY * 0.3 + zHYG * 0.4 + zCurve * 0.3;
 
-    // ── Asset institutional pressure (price/vol 40% + GEX/PCR 60%) ──────────
-    // Mirrors sector logic. Oil = WTI+Brent avg. Bonds = TLT+ZB=F futures − ^TNX
+    // â”€â”€ Asset institutional pressure (price/vol 40% + GEX/PCR 60%) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Mirrors sector logic. Oil = WTI+Brent avg. Bonds = TLT+ZB=F futures âˆ’ ^TNX
     // yield change. Crypto = BTC-USD + IBIT options. News sentiment overlaid.
     const ap = (sym: string, optSym?: string): number => {
       const pp = computeInstitutionalPressure(quoteMap[sym] ?? {}, regimeMult);
@@ -1015,7 +1015,7 @@ export async function GET() {
       assetPressures[id] = clamp((assetPressures[id] ?? 0) + newsBoost, -100, 100);
     }
 
-    // ── Asset metrics ──────────────────────────────────────────────────────────
+    // â”€â”€ Asset metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const rawAssets: Record<string, RawAssetMetrics> = {};
     for (const [id, sym] of Object.entries(ASSET_SYMBOLS)) {
       rawAssets[id] = computeAssetMetrics(id, quoteMap[sym] ?? {}, vix, regime, weights);
@@ -1040,7 +1040,7 @@ export async function GET() {
       };
     }
 
-    // Gravity centers: mean + 0.5σ of fuerzaG — same dynamic threshold as sectors
+    // Gravity centers: mean + 0.5Ïƒ of fuerzaG â€” same dynamic threshold as sectors
     const afForces = Object.values(metrics).map(m => m.fuerzaG ?? 0);
     const afMean   = afForces.reduce((a, b) => a + b, 0) / afForces.length;
     const afSigma  = Math.sqrt(afForces.reduce((a, b) => a + (b - afMean) ** 2, 0) / afForces.length);
@@ -1051,7 +1051,7 @@ export async function GET() {
 
     const flows = computeFlows(metrics);
 
-    // ── Global sector metrics (US baseline) ────────────────────────────────────
+    // â”€â”€ Global sector metrics (US baseline) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const rawSectors: Record<string, RawSectorMetric> = {};
     for (const [sectorId, sym] of Object.entries(SECTOR_SYMBOLS)) {
       rawSectors[sectorId] = computeSectorMetric(sectorId, quoteMap[sym] ?? {}, macro, weights, 'EE.UU.');
@@ -1068,7 +1068,7 @@ export async function GET() {
       friccionRaw: clamp(raw.friccionRaw, 1, 30),
     }));
 
-    // ── Rotation model: price/volume proxy + real GEX/PCR from options ────────
+    // â”€â”€ Rotation model: price/volume proxy + real GEX/PCR from options â”€â”€â”€â”€â”€â”€â”€â”€
     const blend = (pricePressure: number, sym: string) =>
       clamp(pricePressure * 0.4 + (optionsMap[sym]?.optionsPressure ?? 0) * 0.6, -100, 100);
 
@@ -1083,13 +1083,13 @@ export async function GET() {
     };
     const rotationResult = computeSectorRotationSignal(sectorPressures, auxPressures);
 
-    // Apply institutional pressure bonus to MASA (±12 pts max)
+    // Apply institutional pressure bonus to MASA (Â±12 pts max)
     const pressuredGlobalNodes = globalNodes.map(node => ({
       ...node,
       masa: clamp(node.masa + clamp((sectorPressures[node.id] ?? 0) / 8, -12, 12), 0, 100),
     }));
 
-    // sectorData = EE.UU. — rotation-enhanced mean+0.5σ threshold
+    // sectorData = EE.UU. â€” rotation-enhanced mean+0.5Ïƒ threshold
     const usSectorRaw = pressuredGlobalNodes.map(({ id, masa, distancia }) => ({ id, masa, distancia }));
     const usPressureAdj = usSectorRaw.map(n => ({
       ...n,
@@ -1105,7 +1105,7 @@ export async function GET() {
     }));
     const usSectorFlows = computeSectorFlowsCalibrated(usSectorNodes, zscoreFlows);
 
-    // ── Per-country sector data ────────────────────────────────────────────────
+    // â”€â”€ Per-country sector data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const countrySectorData: Record<string, {
       nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
       flows: Array<{ from: string; to: string; strength: number }>;
@@ -1134,7 +1134,7 @@ export async function GET() {
       };
     }
 
-    // ── Assemble scenario ──────────────────────────────────────────────────────
+    // â”€â”€ Assemble scenario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const newsHeadlines = scoredNews.slice(0, 12).map(({ title, source, publishedAt, score, url }) => ({
       title, source, publishedAt, url,
       sentiment: titleSentiment(score),
@@ -1164,8 +1164,8 @@ export async function GET() {
         sentimentScore: newsSentimentScore,
         newsSentiment,
         regimeSignal:   priceRegime !== regime
-          ? `Noticias ajustaron régimen: ${priceRegime} → ${regime}`
-          : `Régimen confirmado por precios y noticias: ${regime}`,
+          ? `Noticias ajustaron rÃ©gimen: ${priceRegime} â†’ ${regime}`
+          : `RÃ©gimen confirmado por precios y noticias: ${regime}`,
       },
     };
 
@@ -1176,3 +1176,6 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to fetch live analysis', detail: message }, { status: 500 });
   }
 }
+
+
+
