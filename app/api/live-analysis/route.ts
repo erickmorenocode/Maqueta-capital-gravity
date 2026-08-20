@@ -667,14 +667,17 @@ Párrafo 4 — Posicionamiento estratégico: qué sugiere el modelo para el posi
 
 Sé específico con los números del modelo. Conecta cada conclusión con datos concretos.`;
 
+    console.log('[AI] Calling Gemini gemini-2.0-flash, key present:', !!apiKey);
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash',
       contents: prompt,
     });
     const text = response.text?.trim();
+    console.log('[AI] Response length:', text?.length ?? 0);
     return text || buildDescription(regime, vix, us10y, gravityCenters, metrics);
-  } catch {
+  } catch (err) {
+    console.error('[AI] generateAIDescription failed:', err);
     return buildDescription(regime, vix, us10y, gravityCenters, metrics);
   }
 }
