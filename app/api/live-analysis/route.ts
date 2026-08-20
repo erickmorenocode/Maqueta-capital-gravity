@@ -611,6 +611,10 @@ function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
   }));
 }
 
+// ─── Gemini cache (10-min TTL — free tier: 20 req/day) ───────────────────────
+let geminiCache: { text: string; ts: number; key: string } | null = null;
+const GEMINI_TTL_MS = 10 * 60 * 1000;
+
 // â”€â”€â”€ Human-readable description â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function generateAIDescription(
   regime: string,
@@ -624,7 +628,14 @@ async function generateAIDescription(
 ): Promise<string> {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return `[SIN API KEY] GEMINI_API_KEY no configurada.\n` + buildDescription(regime, vix, us10y, gravityCenters, metrics);
+    if (!apiKey) return buildDescription(regime, vix, us10y, gravityCenters, metrics);
+
+    // Cache key: regime + top gravity centers (changes when market shifts)
+    const cacheKey = `${regime}|${gravityCenters.slice(0, 3).join(',')}`;
+    const now = Date.now();
+    if (geminiCache && geminiCache.key === cacheKey && now - geminiCache.ts < GEMINI_TTL_MS) {
+      return geminiCache.text;
+    }
 
     const gcDetails = gravityCenters.length
       ? gravityCenters.map(id => {
@@ -667,19 +678,20 @@ PÃ¡rrafo 4 â€” Posicionamiento estratÃ©gico: quÃ© sugiere el modelo p
 
 SÃ© especÃ­fico con los nÃºmeros del modelo. Conecta cada conclusiÃ³n con datos concretos.`;
 
-    console.log('[AI] Calling Gemini gemini-2.0-flash, key present:', !!apiKey);
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
       contents: [{ role: 'user' as const, parts: [{ text: prompt }] }],
     });
     const text = response.text?.trim();
-    console.log('[AI] Response length:', text?.length ?? 0);
-    return text || buildDescription(regime, vix, us10y, gravityCenters, metrics);
+    const result = text || buildDescription(regime, vix, us10y, gravityCenters, metrics);
+    geminiCache = { text: result, ts: Date.now(), key: cacheKey };
+    return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[AI] generateAIDescription failed:', msg);
-    return `[ERROR GEMINI] ${msg}\n` + buildDescription(regime, vix, us10y, gravityCenters, metrics);
+    // Return cached text if available (even stale), else fall back to static description
+    return geminiCache?.text ?? buildDescription(regime, vix, us10y, gravityCenters, metrics);
   }
 }
 
