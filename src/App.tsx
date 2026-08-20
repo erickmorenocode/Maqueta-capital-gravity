@@ -71,6 +71,7 @@ export default function App() {
   const [expandedSectorField, setExpandedSectorField] = useState<{ sectorId: string; field: 'masa' | 'distancia' | 'friccion' } | null>(null);
   const [darkMode, setDarkMode] = useState(true);
   const [scenarioOpen, setScenarioOpen] = useState(false);
+  const [formulasOpen, setFormulasOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -341,12 +342,18 @@ export default function App() {
             )}
           </section>
 
-          <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
-            <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
-              <Activity className="w-3 h-3" />
-              Leyes de Gravedad Financiera
-            </h2>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
+          <section className="rounded-lg border border-border bg-surface/20">
+            <button
+              onClick={() => setFormulasOpen(o => !o)}
+              className="w-full p-4 flex items-center justify-between text-left"
+            >
+              <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
+                <Activity className="w-3 h-3" />
+                Leyes de Gravedad Financiera
+              </h2>
+              <ChevronDown className={cn("w-3 h-3 text-ink/40 shrink-0 transition-transform duration-200", formulasOpen && "rotate-180")} />
+            </button>
+            {formulasOpen && <div className="px-4 pb-4 space-y-4">
               <div className="space-y-2">
                 <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Fuerza Gravitacional</span>
                 <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
@@ -577,7 +584,7 @@ export default function App() {
                   );
                 })()}
               </div>
-            </div>
+            </div>}
           </section>
 
         </div>
