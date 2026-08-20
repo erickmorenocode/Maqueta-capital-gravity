@@ -1226,10 +1226,50 @@ export default function App() {
               {activeScenario.id === 'live' ? 'Justificación del Modelo' : 'Sentimiento del Mercado'}
             </h3>
             <p className="text-[10px] font-mono text-ink/60 leading-relaxed mb-4">
-              {activeScenario.id === 'live' 
-                ? activeScenario.description 
+              {activeScenario.id === 'live'
+                ? activeScenario.description
                 : `La atracción gravitacional actual se está desplazando hacia ${activeScenario.gravityCenters.join(' y ')} debido a condiciones de ${activeScenario.name.toLowerCase()}.`}
             </p>
+
+            {activeScenario.id === 'live' && activeScenario.newsContext && activeScenario.newsContext.headlines.length > 0 && (
+              <div className="space-y-2 border-t border-ink/10 pt-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest">
+                    Noticias · Yahoo &amp; Investing
+                  </span>
+                  <span className={cn(
+                    'text-[8px] font-mono font-bold',
+                    activeScenario.newsContext.newsSentiment === 'bullish' ? 'text-accent' :
+                    activeScenario.newsContext.newsSentiment === 'bearish' ? 'text-danger' : 'text-ink/40'
+                  )}>
+                    {activeScenario.newsContext.newsSentiment === 'bullish' ? 'ALCISTA' :
+                     activeScenario.newsContext.newsSentiment === 'bearish' ? 'BAJISTA' : 'NEUTRAL'}
+                    {' '}({activeScenario.newsContext.sentimentScore > 0 ? '+' : ''}{activeScenario.newsContext.sentimentScore.toFixed(2)})
+                  </span>
+                </div>
+                {activeScenario.newsContext.regimeSignal && (
+                  <p className="text-[7px] font-mono text-ink/30 italic leading-tight">
+                    {activeScenario.newsContext.regimeSignal}
+                  </p>
+                )}
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto custom-scrollbar">
+                  {activeScenario.newsContext.headlines.slice(0, 6).map((item, i) => (
+                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-ink/5 border border-ink/5">
+                      <div className={cn(
+                        'w-1.5 h-1.5 rounded-full mt-[3px] shrink-0',
+                        item.sentiment === 'bullish' ? 'bg-accent' :
+                        item.sentiment === 'bearish' ? 'bg-danger' : 'bg-ink/30'
+                      )} />
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="text-[8px] font-mono text-ink/70 leading-tight line-clamp-2">{item.title}</p>
+                        <span className="text-[7px] font-mono text-ink/30">{item.source}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button className="w-full py-2 rounded border border-accent/30 text-[10px] font-bold uppercase tracking-widest hover:bg-accent hover:text-bg transition-all">
               Descargar Reporte
             </button>

@@ -70,6 +70,20 @@ export interface GravityMetrics {
   friccionJustificacion?: string;
 }
 
+export interface NewsItem {
+  title: string;
+  source: string;
+  publishedAt: number;
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+}
+
+export interface NewsContext {
+  headlines: NewsItem[];
+  sentimentScore: number;
+  newsSentiment: 'bullish' | 'bearish' | 'neutral';
+  regimeSignal: string;
+}
+
 export interface MarketScenario {
   id: string;
   name: string;
@@ -89,6 +103,7 @@ export interface MarketScenario {
     nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
     flows: Array<{ from: string; to: string; strength: number }>;
   }>;
+  newsContext?: NewsContext;
 }
 
 export const DEFAULT_PRICES: MarketPrices = {

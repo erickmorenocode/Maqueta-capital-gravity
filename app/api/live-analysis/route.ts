@@ -560,6 +560,79 @@ function buildDescription(
   );
 }
 
+// ─── News: types + sentiment helpers ─────────────────────────────────────────
+interface RawNewsItem { title: string; source: string; publishedAt: number; }
+
+const CRISIS_WORDS  = ['bank run','bailout','emergency','systemic','sovereign debt','margin call','liquidity crisis','circuit breaker'];
+const BEARISH_WORDS = ['crash','collapse','panic','recession','default','tariff','war','sanctions','selloff','sell-off','plunge','tumble','slump','stagflation','bear market','bank failure','contagion','layoffs','downgrade'];
+const BULLISH_WORDS = ['rally','surge','record high','rate cut','recovery','earnings beat','profit','growth','upgrade','buyback','bull market','rebound','beat estimates'];
+
+function scoreTitle(title: string): number {
+  const t = title.toLowerCase();
+  let s = 0;
+  for (const w of CRISIS_WORDS)  if (t.includes(w)) s -= 2;
+  for (const w of BEARISH_WORDS) if (t.includes(w)) s -= 1;
+  for (const w of BULLISH_WORDS) if (t.includes(w)) s += 1;
+  return Math.max(-4, Math.min(4, s));
+}
+
+function titleSentiment(score: number): 'bullish' | 'bearish' | 'neutral' {
+  return score > 0 ? 'bullish' : score < 0 ? 'bearish' : 'neutral';
+}
+
+function parseRssItems(xml: string, source: string, maxItems = 8): RawNewsItem[] {
+  const items: RawNewsItem[] = [];
+  const itemRe = /<item>([\s\S]*?)<\/item>/g;
+  let m: RegExpExecArray | null;
+  while ((m = itemRe.exec(xml)) !== null && items.length < maxItems) {
+    const block  = m[1];
+    const tMatch = block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/);
+    const dMatch = block.match(/<pubDate>(.*?)<\/pubDate>/);
+    const title  = tMatch ? (tMatch[1] ?? tMatch[2] ?? '').trim() : '';
+    if (!title || title.length < 10) continue;
+    const publishedAt = dMatch ? (new Date(dMatch[1]).getTime() || Date.now()) : Date.now();
+    items.push({ title, source, publishedAt });
+  }
+  return items;
+}
+
+async function fetchYahooNews(): Promise<RawNewsItem[]> {
+  try {
+    const result = await (yf as unknown as {
+      search(q: string, opts: object): Promise<{
+        news?: Array<{ title?: string; publisher?: string; providerPublishTime?: Date | number }>;
+      }>;
+    }).search('market economy stocks global finance', { newsCount: 8 });
+    if (!result?.news?.length) return [];
+    return result.news
+      .filter(n => n.title)
+      .map(n => ({
+        title: n.title!,
+        source: n.publisher ?? 'Yahoo Finance',
+        publishedAt:
+          n.providerPublishTime instanceof Date ? n.providerPublishTime.getTime() :
+          typeof n.providerPublishTime === 'number' ? n.providerPublishTime * 1000 : Date.now(),
+      }));
+  } catch { return []; }
+}
+
+async function fetchInvestingNews(): Promise<RawNewsItem[]> {
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch('https://www.investing.com/rss/news_25.rss', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+    if (!res.ok) return [];
+    return parseRssItems(await res.text(), 'Investing.com');
+  } catch { return []; }
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 export async function GET() {
   try {
@@ -569,9 +642,12 @@ export async function GET() {
     const macroSyms   = ['^VIX', '^TNX', '^IRX', 'HYG', '^MOVE'];
     const allSymbols  = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms])];
 
-    const quotes = await Promise.all(
-      allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null)),
-    );
+    const [rawQuotes, yahooNews, investingNews] = await Promise.all([
+      Promise.all(allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null))),
+      fetchYahooNews(),
+      fetchInvestingNews(),
+    ]);
+    const quotes = rawQuotes;
     const quoteMap: Record<string, YFQuote> = {};
     allSymbols.forEach((sym, i) => { if (quotes[i]) quoteMap[sym] = quotes[i]!; });
 
@@ -589,12 +665,32 @@ export async function GET() {
       ? clamp((1 - (hygQ.regularMarketPrice ?? hygHigh52) / hygHigh52) * 100, 0, 50)
       : 10;
 
-    const regime: 'risk-on' | 'risk-off' | 'crisis' | 'neutral' =
-      vix > 30 || (vix > 24 && vixChg > 8)  ? 'crisis'  :
-      vix < 18 && vixChg < 5                 ? 'risk-on' :
-      vix < 20                               ? 'risk-on' :
-      vix > 24 || vixChg > 5                 ? 'risk-off':
+    // ── News sentiment ──────────────────────────────────────────────────────────
+    const allNewsRaw = [...yahooNews, ...investingNews]
+      .sort((a, b) => b.publishedAt - a.publishedAt)
+      .slice(0, 12);
+    const scoredNews = allNewsRaw.map(item => ({ ...item, score: scoreTitle(item.title) }));
+    const newsAvgScore = scoredNews.length > 0
+      ? scoredNews.reduce((a, b) => a + b.score, 0) / scoredNews.length
+      : 0;
+    const newsSentimentScore = parseFloat(Math.max(-1, Math.min(1, newsAvgScore / 3)).toFixed(3));
+
+    // Price-only regime
+    const priceRegime: 'risk-on' | 'risk-off' | 'crisis' | 'neutral' =
+      vix > 30 || (vix > 24 && vixChg > 8) ? 'crisis' :
+      vix < 18 && vixChg < 5               ? 'risk-on' :
+      vix < 20                              ? 'risk-on' :
+      vix > 24 || vixChg > 5               ? 'risk-off' :
       'neutral';
+
+    // News adjusts neutral regimes; crisis overrides all
+    const regime: 'risk-on' | 'risk-off' | 'crisis' | 'neutral' =
+      priceRegime === 'crisis'                                 ? 'crisis' :
+      priceRegime === 'neutral' && newsSentimentScore < -0.40  ? 'risk-off' :
+      priceRegime === 'neutral' && newsSentimentScore >  0.40  ? 'risk-on' :
+      priceRegime === 'risk-on'  && newsSentimentScore < -0.60 ? 'neutral' :
+      priceRegime === 'risk-off' && newsSentimentScore >  0.60 ? 'neutral' :
+      priceRegime;
 
     const regimeMult = regime === 'crisis' ? 1.5 : regime === 'risk-off' ? 1.2 : 1.0;
     const weights    = REGIME_WEIGHTS[regime];
@@ -673,6 +769,12 @@ export async function GET() {
     }
 
     // ── Assemble scenario ──────────────────────────────────────────────────────
+    const newsHeadlines = scoredNews.slice(0, 8).map(({ title, source, publishedAt, score }) => ({
+      title, source, publishedAt,
+      sentiment: titleSentiment(score),
+    }));
+    const newsSentiment = titleSentiment(newsAvgScore > 0.5 ? 1 : newsAvgScore < -0.5 ? -1 : 0);
+
     const scenario: MarketScenario = {
       id:               'live',
       name:             'Realidad del Mercado en Vivo',
@@ -685,6 +787,14 @@ export async function GET() {
       sectorData:       { nodes: usSectorNodes, flows: usSectorFlows },
       countrySectorData,
       lastUpdated:      Date.now(),
+      newsContext: {
+        headlines:      newsHeadlines,
+        sentimentScore: newsSentimentScore,
+        newsSentiment,
+        regimeSignal:   priceRegime !== regime
+          ? `Noticias ajustaron régimen: ${priceRegime} → ${regime}`
+          : `Régimen confirmado por precios y noticias: ${regime}`,
+      },
     };
 
     return NextResponse.json(scenario);
