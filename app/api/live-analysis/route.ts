@@ -624,7 +624,7 @@ async function generateAIDescription(
 ): Promise<string> {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return buildDescription(regime, vix, us10y, gravityCenters, metrics);
+    if (!apiKey) return `[SIN API KEY] GEMINI_API_KEY no configurada.\n` + buildDescription(regime, vix, us10y, gravityCenters, metrics);
 
     const gcDetails = gravityCenters.length
       ? gravityCenters.map(id => {
@@ -677,8 +677,9 @@ Sé específico con los números del modelo. Conecta cada conclusión con datos 
     console.log('[AI] Response length:', text?.length ?? 0);
     return text || buildDescription(regime, vix, us10y, gravityCenters, metrics);
   } catch (err) {
-    console.error('[AI] generateAIDescription failed:', err);
-    return buildDescription(regime, vix, us10y, gravityCenters, metrics);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[AI] generateAIDescription failed:', msg);
+    return `[ERROR GEMINI] ${msg}\n` + buildDescription(regime, vix, us10y, gravityCenters, metrics);
   }
 }
 
