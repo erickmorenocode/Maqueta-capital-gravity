@@ -604,6 +604,86 @@ function computeSectorRotationSignal(
   return   { signal: 'MIXTO · SIN TENDENCIA CLARA', regimeHint: 'mixed'     };
 }
 
+// ─── Options: Black-Scholes gamma → real GEX + PCR ───────────────────────────
+interface OptionsMetrics {
+  netGex:          number;
+  putCallRatio:    number;
+  gammaFlip:       number | null;
+  optionsPressure: number; // [-100, 100]
+}
+const OPTIONS_ZERO: OptionsMetrics = { netGex: 0, putCallRatio: 1, gammaFlip: null, optionsPressure: 0 };
+const OPTIONS_SYMS = [...Object.values(SECTOR_SYMBOLS), 'QQQ', 'GLD', 'TLT'];
+
+function bsGamma(S: number, K: number, T: number, r: number, sigma: number): number {
+  if (T <= 0 || sigma <= 0 || S <= 0 || K <= 0) return 0;
+  const d1 = (Math.log(S / K) + (r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
+  return Math.exp(-0.5 * d1 * d1) / (Math.sqrt(2 * Math.PI) * S * sigma * Math.sqrt(T));
+}
+
+async function fetchOptionsMetrics(sym: string): Promise<OptionsMetrics> {
+  try {
+    const result = await (yf as unknown as {
+      options(s: string): Promise<{
+        quote: { regularMarketPrice?: number };
+        options: Array<{
+          expirationDate: Date;
+          calls: Array<{ strike?: number; openInterest?: number; volume?: number; impliedVolatility?: number }>;
+          puts:  Array<{ strike?: number; openInterest?: number; volume?: number; impliedVolatility?: number }>;
+        }>;
+      }>;
+    }).options(sym);
+
+    if (!result?.options?.length) return OPTIONS_ZERO;
+    const spot = result.quote?.regularMarketPrice ?? 0;
+    if (spot <= 0) return OPTIONS_ZERO;
+
+    const R   = 0.05; // fixed risk-free rate proxy
+    const now = Date.now();
+    let callGex = 0, putGex = 0, callVol = 0, putVol = 0;
+    const strikeGex: Record<number, number> = {};
+
+    for (const chain of result.options.slice(0, 2)) {
+      const T = (chain.expirationDate.getTime() - now) / (365.25 * 24 * 3600 * 1000);
+      if (T <= 0) continue;
+
+      for (const c of chain.calls) {
+        const K = c.strike ?? 0; const oi = c.openInterest ?? 0;
+        const iv = c.impliedVolatility ?? 0.3;
+        if (K <= 0 || oi <= 0) continue;
+        const g = bsGamma(spot, K, T, R, iv) * oi * 100 * spot * spot / 100;
+        callGex += g; callVol += (c.volume ?? 0);
+        strikeGex[K] = (strikeGex[K] ?? 0) + g;
+      }
+      for (const p of chain.puts) {
+        const K = p.strike ?? 0; const oi = p.openInterest ?? 0;
+        const iv = p.impliedVolatility ?? 0.3;
+        if (K <= 0 || oi <= 0) continue;
+        const g = bsGamma(spot, K, T, R, iv) * oi * 100 * spot * spot / 100;
+        putGex += g; putVol += (p.volume ?? 0);
+        strikeGex[K] = (strikeGex[K] ?? 0) - g;
+      }
+    }
+
+    // Gamma flip: strike where cumulative net GEX changes sign
+    let cum = 0, gammaFlip: number | null = null;
+    for (const s of Object.keys(strikeGex).map(Number).sort((a, b) => a - b)) {
+      const prev = cum; cum += strikeGex[s];
+      if (prev !== 0 && Math.sign(prev) !== Math.sign(cum)) { gammaFlip = s; break; }
+    }
+
+    const total    = callGex + putGex;
+    const gexScore = total > 0 ? clamp(((callGex / total) - 0.5) * 200, -100, 100) : 0;
+    const pcrScore = clamp((1.0 - (callVol > 0 ? putVol / callVol : 1.0)) * 50, -100, 100);
+
+    return {
+      netGex:          callGex - putGex,
+      putCallRatio:    callVol > 0 ? putVol / callVol : 1.0,
+      gammaFlip,
+      optionsPressure: clamp(gexScore * 0.6 + pcrScore * 0.4, -100, 100),
+    };
+  } catch { return OPTIONS_ZERO; }
+}
+
 // ─── News: types + sentiment helpers ─────────────────────────────────────────
 interface RawNewsItem { title: string; source: string; publishedAt: number; }
 
@@ -686,11 +766,14 @@ export async function GET() {
     const macroSyms   = ['^VIX', '^TNX', '^IRX', 'HYG', '^MOVE'];
     const allSymbols  = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms])];
 
-    const [rawQuotes, yahooNews, investingNews] = await Promise.all([
+    const [rawQuotes, yahooNews, investingNews, rawOptions] = await Promise.all([
       Promise.all(allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null))),
       fetchYahooNews(),
       fetchInvestingNews(),
+      Promise.all(OPTIONS_SYMS.map(sym => fetchOptionsMetrics(sym))),
     ]);
+    const optionsMap: Record<string, OptionsMetrics> = {};
+    OPTIONS_SYMS.forEach((sym, i) => { optionsMap[sym] = rawOptions[i]; });
     const quotes = rawQuotes;
     const quoteMap: Record<string, YFQuote> = {};
     allSymbols.forEach((sym, i) => { if (quotes[i]) quoteMap[sym] = quotes[i]!; });
@@ -788,15 +871,18 @@ export async function GET() {
       friccionRaw: clamp(raw.friccionRaw, 1, 30),
     }));
 
-    // ── Rotation model: institutional pressure per sector ─────────────────────
+    // ── Rotation model: price/volume proxy + real GEX/PCR from options ────────
+    const blend = (pricePressure: number, sym: string) =>
+      clamp(pricePressure * 0.4 + (optionsMap[sym]?.optionsPressure ?? 0) * 0.6, -100, 100);
+
     const sectorPressures: Record<string, number> = {};
     for (const [sectorId, sym] of Object.entries(SECTOR_SYMBOLS)) {
-      sectorPressures[sectorId] = computeInstitutionalPressure(quoteMap[sym] ?? {}, regimeMult);
+      sectorPressures[sectorId] = blend(computeInstitutionalPressure(quoteMap[sym] ?? {}, regimeMult), sym);
     }
     const auxPressures = {
-      gold:         computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Gold']]          ?? {}, regimeMult),
-      bonds:        computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Bonds']]         ?? {}, regimeMult),
-      norteAmerica: computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Norte America']] ?? {}, regimeMult),
+      gold:         blend(computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Gold']]          ?? {}, regimeMult), 'GLD'),
+      bonds:        blend(computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Bonds']]         ?? {}, regimeMult), 'TLT'),
+      norteAmerica: blend(computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Norte America']] ?? {}, regimeMult), 'QQQ'),
     };
     const rotationResult = computeSectorRotationSignal(sectorPressures, auxPressures);
 
