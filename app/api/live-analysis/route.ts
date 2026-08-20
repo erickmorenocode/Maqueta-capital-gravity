@@ -611,9 +611,9 @@ function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
   }));
 }
 
-// ─── Gemini cache (10-min TTL — free tier: 20 req/day) ───────────────────────
+// ─── Gemini cache (60-min TTL — free tier: 20 req/day) ───────────────────────
 let geminiCache: { text: string; ts: number; key: string } | null = null;
-const GEMINI_TTL_MS = 10 * 60 * 1000;
+const GEMINI_TTL_MS = 60 * 60 * 1000;
 
 // â”€â”€â”€ Human-readable description â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function generateAIDescription(
@@ -630,8 +630,8 @@ async function generateAIDescription(
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return buildDescription(regime, vix, us10y, gravityCenters, metrics);
 
-    // Cache key: regime + top gravity centers (changes when market shifts)
-    const cacheKey = `${regime}|${gravityCenters.slice(0, 3).join(',')}`;
+    // Cache key: only regime — reduces invalidations, conserves free-tier quota
+    const cacheKey = regime;
     const now = Date.now();
     if (geminiCache && geminiCache.key === cacheKey && now - geminiCache.ts < GEMINI_TTL_MS) {
       return geminiCache.text;
