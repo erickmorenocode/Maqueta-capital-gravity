@@ -333,7 +333,7 @@ export default function App() {
               <Activity className="w-3 h-3" />
               Leyes de Gravedad Financiera
             </h2>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
               <div className="space-y-2">
                 <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Fuerza Gravitacional</span>
                 <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
@@ -570,15 +570,22 @@ export default function App() {
           <section className="p-4 rounded-lg border border-border bg-surface/20 space-y-4">
             <h2 className="text-[11px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-2">
               <Info className="w-3 h-3" />
-              Insight de Gravedad
+              {activeScenario.id === 'live' ? 'Análisis en Vivo' : 'Insight de Gravedad'}
             </h2>
             <div className="space-y-3">
-              <div className="p-3 rounded bg-surface/60 border border-ink/5">
-                <p className="text-[10px] font-mono text-ink/60 leading-relaxed italic">
-                  {activeScenario.id === 'live' 
-                    ? "Análisis basado en noticias de último minuto y datos macro en tiempo real. El capital se mueve hacia la mayor atracción ajustada por riesgo."
-                    : "El capital no va al mayor retorno absoluto; va al mejor retorno ajustado por riesgo y liquidez. El dinero se mueve hacia donde hay mayor atracción ajustada por riesgo."}
-                </p>
+              <div className="p-3 rounded bg-surface/60 border border-ink/5 max-h-[45vh] overflow-y-auto custom-scrollbar">
+                {activeScenario.id === 'live' && activeScenario.description
+                  ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
+                      <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
+                        {line}
+                      </p>
+                    ))
+                  : (
+                    <p className="text-[10px] font-mono text-ink/60 leading-relaxed italic">
+                      El capital no va al mayor retorno absoluto; va al mejor retorno ajustado por riesgo y liquidez. El dinero se mueve hacia donde hay mayor atracción ajustada por riesgo.
+                    </p>
+                  )
+                }
               </div>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-[10px] font-mono">
