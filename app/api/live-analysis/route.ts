@@ -378,6 +378,7 @@ function computeCountrySectorNodes(
   countryQuote: YFQuote | null,
   countryName: string,
   macro: MacroContext,
+  sectorPressures: Record<string, number> = {},
 ): Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }> {
   const profile      = G8_SECTOR_PROFILES[countryName];
   const creditRating = COUNTRY_CREDIT_RATINGS[countryName] ?? 70;
@@ -454,15 +455,18 @@ function computeCountrySectorNodes(
     // FRICCION: global base + country-specific friction
     const friccion = Math.round(clamp(node.friccionRaw * 0.5 + countryFricBase * 0.5, 1, 30));
 
-    return { id: node.id, masa, distancia, friccion };
+    return { id: node.id, masa, distancia, friccion, domFactor };
   });
 
-  // mean+0.5σ threshold — gravity centers are those that statistically stand out
-  const sForces = rawNodes.map(n => n.masa - n.distancia);
+  // mean+0.5σ threshold — rotation-enhanced, pressure weighted by country sector dominance
+  const sForces = rawNodes.map(n => {
+    const pressureContrib = clamp((sectorPressures[n.id] ?? 0) / 5, -15, 15) * n.domFactor;
+    return (n.masa - n.distancia) + pressureContrib;
+  });
   const sMean   = sForces.reduce((a, b) => a + b, 0) / sForces.length;
   const sSigma  = Math.sqrt(sForces.reduce((a, b) => a + (b - sMean) ** 2, 0) / sForces.length);
   const sHighT  = sMean + 0.5 * sSigma;
-  return rawNodes.map(n => ({ id: n.id, masa: n.masa, distancia: n.distancia, isGravityCenter: (n.masa - n.distancia) >= sHighT }));
+  return rawNodes.map((n, i) => ({ id: n.id, masa: n.masa, distancia: n.distancia, isGravityCenter: sForces[i] >= sHighT }));
 }
 
 // ─── Sector flows with Z-score calibration ────────────────────────────────────
@@ -826,7 +830,7 @@ export async function GET() {
 
     for (const [countryName, etfSym] of Object.entries(COUNTRY_ETF_SYMBOLS)) {
       const countryQuote = etfSym ? (quoteMap[etfSym] ?? null) : null;
-      const nodes = computeCountrySectorNodes(pressuredGlobalNodes, countryQuote, countryName, macro);
+      const nodes = computeCountrySectorNodes(pressuredGlobalNodes, countryQuote, countryName, macro, sectorPressures);
       countrySectorData[countryName] = {
         nodes,
         flows: computeSectorFlowsCalibrated(nodes, zscoreFlows),
