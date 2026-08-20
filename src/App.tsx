@@ -289,7 +289,7 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute z-30 top-full mt-1 w-full rounded-lg border border-border bg-bg/95 backdrop-blur shadow-xl overflow-hidden"
+                    className="absolute z-30 top-full mt-1 w-full rounded-lg border border-border bg-bg/95 backdrop-blur shadow-xl overflow-y-auto max-h-[80vh] custom-scrollbar"
                   >
                     {scenarios.map((scenario) => (
                       <button
@@ -317,7 +317,7 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[9px] text-ink/35 leading-snug font-mono line-clamp-2">
+                        <p className="text-[9px] text-ink/35 leading-snug font-mono">
                           {scenario.description}
                         </p>
                       </button>
