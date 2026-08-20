@@ -317,8 +317,10 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[9px] text-ink/35 leading-snug font-mono">
-                          {scenario.description}
+                        <p className="text-[9px] text-ink/35 leading-snug font-mono line-clamp-3">
+                          {scenario.id === 'live'
+                            ? scenario.description.split('\n').filter(Boolean)[0] ?? scenario.description
+                            : scenario.description}
                         </p>
                       </button>
                     ))}
@@ -1347,21 +1349,6 @@ export default function App() {
                 </span>
               </div>
             )}
-            {/* Full analysis — scrollable, no clipping */}
-            <div className="max-h-[420px] overflow-y-auto custom-scrollbar mb-4 pr-1">
-              {activeScenario.id === 'live'
-                ? activeScenario.description.split('\n').filter(Boolean).map((line, i) => (
-                    <p key={i} className="text-[10px] font-mono text-ink/60 leading-relaxed mb-2 last:mb-0">
-                      {line}
-                    </p>
-                  ))
-                : (
-                  <p className="text-[10px] font-mono text-ink/60 leading-relaxed">
-                    {`La atracción gravitacional actual se está desplazando hacia ${activeScenario.gravityCenters.join(' y ')} debido a condiciones de ${activeScenario.name.toLowerCase()}.`}
-                  </p>
-                )
-              }
-            </div>
 
             {activeScenario.id === 'live' && activeScenario.newsContext && activeScenario.newsContext.headlines.length > 0 && (
               <div className="space-y-2 border-t border-ink/10 pt-3 mb-4">
