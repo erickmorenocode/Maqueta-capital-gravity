@@ -1059,35 +1059,52 @@ export default function App() {
 
                         {!companyAnalysis?.loading && companyAnalysis?.data && companyAnalysis.sector === selectedSectorId && (
                           <div className="space-y-1">
-                            {companyAnalysis.data.filter(r => !r.error).map((co) => (
-                              <div
-                                key={co.ticker}
-                                className={cn(
-                                  'flex items-center gap-2 px-2 py-1.5 rounded border text-[8px] font-mono',
-                                  co.isGravityCenter
-                                    ? 'bg-accent/10 border-accent/25'
-                                    : 'bg-ink/5 border-ink/5'
-                                )}
-                              >
-                                <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', co.isGravityCenter ? 'bg-accent animate-pulse' : 'bg-ink/20')} />
-                                <span className={cn('font-bold w-[72px] shrink-0', co.isGravityCenter ? 'text-accent' : 'text-ink/60')}>{co.ticker}</span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-ink/40 truncate text-[7px]">{co.name}</span>
-                                    <span className={cn('font-bold ml-1 shrink-0', co.fuerzaG >= 0 ? 'text-accent' : 'text-danger')}>G={co.fuerzaG.toFixed(1)}</span>
-                                  </div>
-                                  <div className="flex gap-2 text-[6px] text-ink/25 mt-0.5">
-                                    <span>M={co.masa}</span>
-                                    <span>d={co.distancia}</span>
-                                    <span>f={co.friccion}</span>
-                                    <span className={cn(co.institutionalPressure >= 0 ? 'text-accent/50' : 'text-danger/50')}>
-                                      P={co.institutionalPressure > 0 ? '+' : ''}{co.institutionalPressure.toFixed(0)}
-                                    </span>
-                                    {co.gammaFlip && <span className="text-yellow-500/50">γ↑{co.gammaFlip.toFixed(0)}</span>}
+                            {companyAnalysis.data.filter(r => !r.error).map((co) => {
+                              const isHigh = co.tier === 'high';
+                              const isMid  = co.tier === 'medium';
+                              return (
+                                <div
+                                  key={co.ticker}
+                                  className={cn(
+                                    'flex items-center gap-2 px-2 py-1.5 rounded border text-[8px] font-mono',
+                                    isHigh ? 'bg-green-500/10 border-green-500/30'
+                                    : isMid ? 'bg-slate-600/15 border-slate-600/25'
+                                    :         'bg-red-500/8 border-red-500/20'
+                                  )}
+                                >
+                                  <div className={cn(
+                                    'w-1.5 h-1.5 rounded-full shrink-0',
+                                    isHigh ? 'bg-green-400 animate-pulse'
+                                    : isMid ? 'bg-slate-400'
+                                    :         'bg-red-400'
+                                  )} />
+                                  <span className={cn(
+                                    'font-bold w-[72px] shrink-0',
+                                    isHigh ? 'text-green-400'
+                                    : isMid ? 'text-slate-400'
+                                    :         'text-red-400'
+                                  )}>{co.ticker}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-ink/40 truncate text-[7px]">{co.name}</span>
+                                      <span className={cn(
+                                        'font-bold ml-1 shrink-0',
+                                        isHigh ? 'text-green-400' : isMid ? 'text-slate-400' : 'text-red-400'
+                                      )}>G={co.fuerzaG.toFixed(1)}</span>
+                                    </div>
+                                    <div className="flex gap-2 text-[6px] text-ink/25 mt-0.5">
+                                      <span>M={co.masa}</span>
+                                      <span>d={co.distancia}</span>
+                                      <span>f={co.friccion}</span>
+                                      <span className={cn(co.institutionalPressure >= 0 ? 'text-green-400/50' : 'text-red-400/50')}>
+                                        P={co.institutionalPressure > 0 ? '+' : ''}{co.institutionalPressure.toFixed(0)}
+                                      </span>
+                                      {co.gammaFlip && <span className="text-yellow-500/50">γ↑{co.gammaFlip.toFixed(0)}</span>}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                             <p className="text-[6px] font-mono text-ink/20 pt-1">Centro G: umbral = media + 0.5σ · PCR+GEX vía Black-Scholes γ</p>
                           </div>
                         )}

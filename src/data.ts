@@ -410,6 +410,7 @@ export interface CompanyGravityResult {
   gammaFlip: number | null;
   putCallRatio: number;
   isGravityCenter: boolean;
+  tier: 'high' | 'medium' | 'low';
   masaComponents: { retorno: number; crecimiento: number; liquidez: number; confianza: number };
   marketCap: number;
   error?: boolean;

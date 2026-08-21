@@ -138,7 +138,7 @@ function computeCompanyG(
   weights: { w1: number; w2: number; w3: number; w4: number },
   sectorChangePct: number,
   country: string,
-): Omit<CompanyGravityResult, 'ticker' | 'name' | 'isGravityCenter' | 'error'> {
+): Omit<CompanyGravityResult, 'ticker' | 'name' | 'isGravityCenter' | 'tier' | 'error'> {
   const price    = quote.regularMarketPrice         ?? 100;
   const low52    = quote.fiftyTwoWeekLow            ?? price * 0.80;
   const high52   = quote.fiftyTwoWeekHigh           ?? price * 1.20;
@@ -287,7 +287,7 @@ export async function GET(req: NextRequest) {
         ticker: co.ticker, name: co.name, price: 0, changePct: 0,
         masa: 0, distancia: 0, friccion: 0, fuerzaG: -99,
         institutionalPressure: 0, optionsPressure: 0, gammaFlip: null, putCallRatio: 1,
-        isGravityCenter: false,
+        isGravityCenter: false, tier: 'low' as const,
         masaComponents: { retorno: 0, crecimiento: 0, liquidez: 0, confianza: 0 },
         marketCap: 0, error: true,
       };
@@ -296,17 +296,21 @@ export async function GET(req: NextRequest) {
       quote, companyOptions[i], vix, us10y, us2y, move, hygStress,
       regime, regimeMult, weights, sectorChangePct, country,
     );
-    return { ticker: co.ticker, name: co.name, isGravityCenter: false, ...computed };
+    return { ticker: co.ticker, name: co.name, isGravityCenter: false, tier: 'medium' as const, ...computed } as CompanyGravityResult;
   });
 
-  // Dynamic threshold: mean + 0.5σ of fuerzaG (excluding error entries)
+  // Dynamic thresholds: mean ± 0.5σ → high / medium / low
   const validForces = results.filter(r => !r.error).map(r => r.fuerzaG);
   if (validForces.length > 0) {
-    const mean  = validForces.reduce((a, b) => a + b, 0) / validForces.length;
-    const sigma = Math.sqrt(validForces.reduce((a, b) => a + (b - mean) ** 2, 0) / validForces.length);
-    const threshold = mean + 0.5 * sigma;
+    const mean   = validForces.reduce((a, b) => a + b, 0) / validForces.length;
+    const sigma  = Math.sqrt(validForces.reduce((a, b) => a + (b - mean) ** 2, 0) / validForces.length);
+    const highT  = mean + 0.5 * sigma;
+    const lowT   = mean - 0.5 * sigma;
     for (const r of results) {
-      if (!r.error) r.isGravityCenter = r.fuerzaG >= threshold;
+      if (!r.error) {
+        r.isGravityCenter = r.fuerzaG >= highT;
+        r.tier = r.fuerzaG >= highT ? 'high' : r.fuerzaG >= lowT ? 'medium' : 'low';
+      }
     }
   }
 
