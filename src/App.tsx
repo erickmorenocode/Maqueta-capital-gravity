@@ -17,7 +17,7 @@ import {
   Moon,
   ChevronDown,
 } from 'lucide-react';
-import { SCENARIOS, GEO_POINTS, GEO_EVENTS, MarketScenario, GeoPoint, GeopoliticalEvent, DEFAULT_PRICES, MarketPrices } from './data';
+import { SCENARIOS, GEO_POINTS, GEO_EVENTS, COUNTRY_SECTOR_COMPANIES, MarketScenario, GeoPoint, GeopoliticalEvent, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
 import { fetchLiveMarketGravity } from './services/geminiService';
 import { clsx, type ClassValue } from 'clsx';
@@ -962,6 +962,38 @@ export default function App() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Company recommendations */}
+                      {(() => {
+                        const countryKey = selectedCountry ?? 'EE.UU.';
+                        const companies = COUNTRY_SECTOR_COMPANIES[countryKey]?.[selectedSectorId] ?? [];
+                        if (companies.length === 0) return null;
+                        return (
+                          <div className="pt-3 border-t border-ink/5 space-y-2">
+                            <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3" />
+                              Empresas Beneficiadas — {countryKey}
+                            </h4>
+                            <p className="text-[7px] font-mono text-ink/25 italic">Flujo G={fuerza.toFixed(2)} · {node.isGravityCenter ? 'Centro de gravedad activo' : 'Sector secundario'}</p>
+                            <div className="space-y-1">
+                              {companies.map((co, idx) => (
+                                <div
+                                  key={co.ticker}
+                                  className={cn(
+                                    'flex items-center justify-between px-2 py-1.5 rounded border text-[8px] font-mono',
+                                    idx < 3 && node.isGravityCenter
+                                      ? 'bg-accent/10 border-accent/25 text-accent'
+                                      : 'bg-ink/5 border-ink/5 text-ink/60'
+                                  )}
+                                >
+                                  <span className="font-bold">{co.ticker}</span>
+                                  <span className="text-ink/50 truncate ml-2 text-right max-w-[140px]">{co.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </motion.div>
                 );

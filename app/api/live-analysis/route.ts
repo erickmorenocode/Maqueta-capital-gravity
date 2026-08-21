@@ -625,6 +625,9 @@ async function generateAIDescription(
   headlines: Array<{ title: string; source: string; sentiment: string }>,
   assetPressures: Record<string, number>,
   rotationSignal: string,
+  countrySectorData?: Record<string, {
+    nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
+  }>,
 ): Promise<string> {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -654,6 +657,27 @@ async function generateAIDescription(
       .map(h => `[${h.sentiment.toUpperCase()}] ${h.title} â€” ${h.source}`)
       .join('\n');
 
+    // Top G7 sectors by gravity force
+    const SECTOR_LABELS: Record<string, string> = {
+      technology:'Tecnología', communication:'Comunicación', cons_discretionary:'C.Discrecional',
+      cons_staples:'C.Básico', energy:'Energía', financial:'Financiero',
+      healthcare:'Salud', industrials:'Industriales', real_estate:'Inmobiliario',
+      basic_materials:'Materiales', utilities:'Utilities',
+    };
+    const countrySectorSummary = countrySectorData
+      ? Object.entries(countrySectorData)
+          .filter(([c]) => c !== 'Rusia')
+          .map(([country, { nodes }]) => {
+            const centers = nodes
+              .filter(n => n.isGravityCenter)
+              .sort((a, b) => (b.masa - b.distancia) - (a.masa - a.distancia))
+              .slice(0, 3)
+              .map(n => `${SECTOR_LABELS[n.id] ?? n.id}(M=${n.masa},d=${n.distancia})`)
+              .join(', ');
+            return `${country}: ${centers || 'sin centros'}`;
+          }).join('\n')
+      : 'No disponible';
+
     const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
     const prompt = `Eres un analista cuantitativo de mercados financieros especializado en el modelo de Gravedad de Capital (G = (MASA âˆ’ distancia) / fricciÃ³n).
 
@@ -669,12 +693,17 @@ ${allAssetsRanked}
 NOTICIAS DEL DÃA (${headlines.length} titulares analizados):
 ${newsText}
 
-Escribe un anÃ¡lisis en espaÃ±ol de 4 pÃ¡rrafos cortos. Cada pÃ¡rrafo separado por una lÃ­nea en blanco. Sin markdown, sin viÃ±etas, sin encabezados.
+
+SECTORES LIDERES POR PAIS G7 (centros de gravedad activos, Sector(M=masa,d=distancia)):
+${countrySectorSummary}
+
+Escribe un anÃ¡lisis en espaÃ±ol de 5 pÃ¡rrafos cortos. Cada pÃ¡rrafo separado por una lÃ­nea en blanco. Sin markdown, sin viÃ±etas, sin encabezados.
 
 PÃ¡rrafo 1 â€” InterpretaciÃ³n de noticias: quÃ© narrativa macroeconÃ³mica emergen de los titulares y cÃ³mo afectan el sentimiento de mercado hoy.
 PÃ¡rrafo 2 â€” JustificaciÃ³n de centros de gravedad: explica por quÃ© exactamente esos activos/mercados estÃ¡n atrayendo capital HOY, citando sus valores MASA/distancia/G y conectÃ¡ndolos con las noticias relevantes.
 PÃ¡rrafo 3 â€” Activos que pierden capital: cuÃ¡les tienen la menor Fuerza G, por quÃ© el capital sale de ahÃ­, y quÃ© noticias o mÃ©tricas lo explican.
-PÃ¡rrafo 4 â€” Posicionamiento estratÃ©gico: quÃ© sugiere el modelo para el posicionamiento de capital en las prÃ³ximas horas/dÃ­as, dado el rÃ©gimen ${regime} y las seÃ±ales actuales.
+Párrafo 4 — Sectores por países G7: analiza cuáles sectores dominan en qué países (usando los datos de SECTORES LIDERES POR PAIS). Identifica divergencias entre economías G7 y qué implica para la rotación de capital internacional. Menciona al menos 3 países con sus sectores líderes y valores MASA/distancia.
+Párrafo 5 — Posicionamiento estratégico: qué sugiere el modelo para el posicionamiento de capital en las próximas horas/días, dado el régimen ${regime} y las señales actuales.
 
 SÃ© especÃ­fico con los nÃºmeros del modelo. Conecta cada conclusiÃ³n con datos concretos.`;
 
@@ -1156,6 +1185,7 @@ export async function GET() {
     const aiDescription = await generateAIDescription(
       regime, vix, us10y, gravityCenters, metrics,
       newsHeadlines, assetPressures, rotationResult.signal,
+      countrySectorData,
     );
 
     const scenario: MarketScenario = {
