@@ -17,7 +17,7 @@ import {
   Moon,
   ChevronDown,
 } from 'lucide-react';
-import { SCENARIOS, GEO_POINTS, GEO_EVENTS, COUNTRY_SECTOR_COMPANIES, MarketScenario, GeoPoint, GeopoliticalEvent, DEFAULT_PRICES, MarketPrices } from './data';
+import { SCENARIOS, GEO_POINTS, GEO_EVENTS, COUNTRY_SECTOR_COMPANIES, MarketScenario, GeoPoint, GeopoliticalEvent, CompanyGravityResult, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
 import { fetchLiveMarketGravity } from './services/geminiService';
 import { clsx, type ClassValue } from 'clsx';
@@ -75,6 +75,7 @@ export default function App() {
   const [justificacionOpen, setJustificacionOpen] = useState(false);
   const [showGeoEvents, setShowGeoEvents] = useState(false);
   const [selectedGeoEvent, setSelectedGeoEvent] = useState<GeopoliticalEvent | null>(null);
+  const [companyAnalysis, setCompanyAnalysis] = useState<{ loading: boolean; data: CompanyGravityResult[]; country: string; sector: string } | null>(null);
 
   useEffect(() => {
     if (darkMode) {
@@ -86,6 +87,26 @@ export default function App() {
 
   const activeScenarioRef = useRef(activeScenario);
   useEffect(() => { activeScenarioRef.current = activeScenario; }, [activeScenario]);
+
+  const fetchCompanyAnalysis = useCallback(async (sectorId: string, country: string) => {
+    setCompanyAnalysis({ loading: true, data: [], country, sector: sectorId });
+    try {
+      const res = await fetch(`/api/company-analysis?country=${encodeURIComponent(country)}&sector=${encodeURIComponent(sectorId)}`);
+      if (!res.ok) throw new Error('fetch failed');
+      const json = await res.json();
+      setCompanyAnalysis({ loading: false, data: json.results ?? [], country, sector: sectorId });
+    } catch {
+      setCompanyAnalysis(prev => prev ? { ...prev, loading: false } : null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedSectorId && selectedCountry) {
+      fetchCompanyAnalysis(selectedSectorId, selectedCountry);
+    } else {
+      setCompanyAnalysis(null);
+    }
+  }, [selectedSectorId, selectedCountry, fetchCompanyAnalysis]);
 
   const handlePointClick = useCallback((point: GeoPoint) => {
     setSelectedPoint(point);
@@ -587,6 +608,65 @@ export default function App() {
                   );
                 })()}
               </div>
+
+              {/* ── Fuerza G por Empresa ──────────────────────────────────── */}
+              <div className="space-y-3 pt-2 border-t border-ink/5">
+                <span className="text-[8px] font-mono text-ink/30 uppercase tracking-widest block">Fuerza G por Empresa (on-demand)</span>
+                <div className="p-3 rounded bg-surface/60 border border-ink/5 text-center">
+                  <p className="text-[10px] font-mono text-accent font-bold">G = (M_adj − d) / f</p>
+                  <p className="text-[7px] font-mono text-ink/30 mt-1">M_adj = M + clamp(P_inst / 5, −15, +15)</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 text-[9px] font-mono">
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <span className="text-accent font-bold">MASA — Componentes empresa</span>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>Return  = PriceRet52s×0.20 + Mom50d×0.20 + Δ%día×0.30 + E/P×0.30</span>
+                      <span>Growth  = EPSgrowth×0.50 + ROE×0.30 + DivYield×0.20</span>
+                      <span>Liquid. = Vol/AvgVol×0.50 + log(MktCap)×0.30 + DivYield×0.20</span>
+                      <span>Confid. = Mom50d×0.40 + ROE×0.30 + InstScore×0.30</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <span className="text-yellow-400 font-bold">Presión Institucional — P_inst</span>
+                    <p className="text-[7px] font-mono text-ink/30 italic">P_inst = PrecioVol×0.40 + Opciones×0.60</p>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>PrecioVol = (Mom50d×0.5 + VolSurge×0.3 + Δ%×0.2) × régimeMult</span>
+                      <span>Opciones = GEXscore×0.60 + PCRscore×0.40</span>
+                      <span>GEX = Σγ·OI·100·S² (calls) − Σγ·OI·100·S² (puts)</span>
+                      <span>γ = e^(−d₁²/2) / (S·σ·√T·√2π)  ·  d₁ = (ln S/K + (r+σ²/2)T) / σ√T</span>
+                      <span>GammaFlip = precio donde GEX neto acumulado cambia de signo</span>
+                      <span>PCR = volumen puts / volumen calls</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <span className="text-danger font-bold">DISTANCIA — empresa</span>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>Volat.  = rango52s×(VIX/20)×0.40 + HistVol×0.35 + MOVE×0.05</span>
+                      <span>Spread  = HYGstress×régMult×0.3 + BetaPremium×0.3 + CPI×0.5 + Yield</span>
+                      <span>BetaPremium = |Δ%empresa − Δ%ETF_sector| × 2</span>
+                      <span>d = clamp(Volat + Spread + (1−ρ)×30 / 1.2, 10, 90)</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1 border-b border-ink/5 pb-2">
+                    <span className="text-slate-400 font-bold">FRICCIÓN — empresa</span>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>BidAsk   = (ask−bid)/P × 100 × 20</span>
+                      <span>Slippage = clamp(15 − log10(MktCap) + 9, 0, 15) × 0.5</span>
+                      <span>TxCost   = costo transaccional por país (EE.UU.=0.05%, JP=0.18%…)</span>
+                      <span>LiqBonus = clamp((Vol/AvgVol − 1) × 10, −10, +10)</span>
+                      <span>f = (BidAsk + Slippage + TxCost − LiqBonus) × régimeMult</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-accent font-bold">Umbral dinámico empresas</span>
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[7px] text-ink/30">
+                      <span>threshold = media(G_empresas) + 0.5 × σ(G_empresas)</span>
+                      <span>G ≥ threshold → Centro de Gravedad (verde) · G &lt; threshold → Secundaria</span>
+                      <span>Calculado on-demand al seleccionar sector + país</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>}
           </section>
 
@@ -963,37 +1043,66 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Company recommendations */}
-                      {(() => {
-                        const countryKey = selectedCountry ?? 'EE.UU.';
-                        const companies = COUNTRY_SECTOR_COMPANIES[countryKey]?.[selectedSectorId] ?? [];
-                        if (companies.length === 0) return null;
-                        return (
-                          <div className="pt-3 border-t border-ink/5 space-y-2">
-                            <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
-                              <TrendingUp className="w-3 h-3" />
-                              Empresas Beneficiadas — {countryKey}
-                            </h4>
-                            <p className="text-[7px] font-mono text-ink/25 italic">Flujo G={fuerza.toFixed(2)} · {node.isGravityCenter ? 'Centro de gravedad activo' : 'Sector secundario'}</p>
-                            <div className="space-y-1">
-                              {companies.map((co, idx) => (
-                                <div
-                                  key={co.ticker}
-                                  className={cn(
-                                    'flex items-center justify-between px-2 py-1.5 rounded border text-[8px] font-mono',
-                                    idx < 3 && node.isGravityCenter
-                                      ? 'bg-accent/10 border-accent/25 text-accent'
-                                      : 'bg-ink/5 border-ink/5 text-ink/60'
-                                  )}
-                                >
-                                  <span className="font-bold">{co.ticker}</span>
-                                  <span className="text-ink/50 truncate ml-2 text-right max-w-[140px]">{co.name}</span>
-                                </div>
-                              ))}
-                            </div>
+                      {/* Company G-force analysis */}
+                      <div className="pt-3 border-t border-ink/5 space-y-2">
+                        <h4 className="text-[9px] font-mono text-ink/40 uppercase tracking-widest flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          Fuerza G por Empresa — {selectedCountry ?? 'EE.UU.'}
+                        </h4>
+
+                        {companyAnalysis?.loading && (
+                          <div className="flex items-center gap-2 py-3 text-[8px] font-mono text-ink/30">
+                            <div className="w-3 h-3 border border-accent/40 border-t-accent rounded-full animate-spin" />
+                            Calculando G por empresa...
                           </div>
-                        );
-                      })()}
+                        )}
+
+                        {!companyAnalysis?.loading && companyAnalysis?.data && companyAnalysis.sector === selectedSectorId && (
+                          <div className="space-y-1">
+                            {companyAnalysis.data.filter(r => !r.error).map((co) => (
+                              <div
+                                key={co.ticker}
+                                className={cn(
+                                  'flex items-center gap-2 px-2 py-1.5 rounded border text-[8px] font-mono',
+                                  co.isGravityCenter
+                                    ? 'bg-accent/10 border-accent/25'
+                                    : 'bg-ink/5 border-ink/5'
+                                )}
+                              >
+                                <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', co.isGravityCenter ? 'bg-accent animate-pulse' : 'bg-ink/20')} />
+                                <span className={cn('font-bold w-[72px] shrink-0', co.isGravityCenter ? 'text-accent' : 'text-ink/60')}>{co.ticker}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-ink/40 truncate text-[7px]">{co.name}</span>
+                                    <span className={cn('font-bold ml-1 shrink-0', co.fuerzaG >= 0 ? 'text-accent' : 'text-danger')}>G={co.fuerzaG.toFixed(1)}</span>
+                                  </div>
+                                  <div className="flex gap-2 text-[6px] text-ink/25 mt-0.5">
+                                    <span>M={co.masa}</span>
+                                    <span>d={co.distancia}</span>
+                                    <span>f={co.friccion}</span>
+                                    <span className={cn(co.institutionalPressure >= 0 ? 'text-accent/50' : 'text-danger/50')}>
+                                      P={co.institutionalPressure > 0 ? '+' : ''}{co.institutionalPressure.toFixed(0)}
+                                    </span>
+                                    {co.gammaFlip && <span className="text-yellow-500/50">γ↑{co.gammaFlip.toFixed(0)}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <p className="text-[6px] font-mono text-ink/20 pt-1">Centro G: umbral = media + 0.5σ · PCR+GEX vía Black-Scholes γ</p>
+                          </div>
+                        )}
+
+                        {!companyAnalysis?.loading && (!companyAnalysis?.data?.length || companyAnalysis.sector !== selectedSectorId) && (
+                          <div className="space-y-1">
+                            {(COUNTRY_SECTOR_COMPANIES[selectedCountry ?? 'EE.UU.']?.[selectedSectorId] ?? []).map(co => (
+                              <div key={co.ticker} className="flex items-center justify-between px-2 py-1 rounded bg-ink/5 border border-ink/5 text-[8px] font-mono text-ink/40">
+                                <span className="font-bold">{co.ticker}</span>
+                                <span className="text-ink/30 truncate ml-2">{co.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 );

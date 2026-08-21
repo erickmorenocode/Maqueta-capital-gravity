@@ -396,6 +396,25 @@ export interface CompanyRecommendation {
   name: string;
 }
 
+export interface CompanyGravityResult {
+  ticker: string;
+  name: string;
+  price: number;
+  changePct: number;
+  masa: number;
+  distancia: number;
+  friccion: number;
+  fuerzaG: number;
+  institutionalPressure: number;
+  optionsPressure: number;
+  gammaFlip: number | null;
+  putCallRatio: number;
+  isGravityCenter: boolean;
+  masaComponents: { retorno: number; crecimiento: number; liquidez: number; confianza: number };
+  marketCap: number;
+  error?: boolean;
+}
+
 export const COUNTRY_SECTOR_COMPANIES: Record<string, Record<string, CompanyRecommendation[]>> = {
   'EE.UU.': {
     technology:         [{ ticker:'AAPL', name:'Apple' },{ ticker:'MSFT', name:'Microsoft' },{ ticker:'NVDA', name:'Nvidia' },{ ticker:'GOOGL', name:'Alphabet' },{ ticker:'META', name:'Meta Platforms' },{ ticker:'AVGO', name:'Broadcom' },{ ticker:'ORCL', name:'Oracle' },{ ticker:'AMD', name:'AMD' },{ ticker:'QCOM', name:'Qualcomm' },{ ticker:'IBM', name:'IBM' }],
