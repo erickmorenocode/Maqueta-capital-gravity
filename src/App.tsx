@@ -16,10 +16,12 @@ import {
   Sun,
   Moon,
   ChevronDown,
+  FileDown,
 } from 'lucide-react';
 import { SCENARIOS, GEO_POINTS, GEO_EVENTS, COUNTRY_SECTOR_COMPANIES, MarketScenario, GeoPoint, GeopoliticalEvent, CompanyGravityResult, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
 import { fetchLiveMarketGravity } from './services/geminiService';
+import { generateMarketReportPDF } from './utils/pdfReport';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -76,6 +78,21 @@ export default function App() {
   const [showGeoEvents, setShowGeoEvents] = useState(false);
   const [selectedGeoEvent, setSelectedGeoEvent] = useState<GeopoliticalEvent | null>(null);
   const [companyAnalysis, setCompanyAnalysis] = useState<{ loading: boolean; data: CompanyGravityResult[]; country: string; sector: string } | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  const handleDownloadReport = useCallback(() => {
+    setIsGeneratingReport(true);
+    try {
+      generateMarketReportPDF({
+        marketPrices,
+        activeScenario,
+        geoPoints: GEO_POINTS,
+        darkMode,
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }, [marketPrices, activeScenario, darkMode]);
 
   useEffect(() => {
     if (darkMode) {
@@ -1447,6 +1464,19 @@ export default function App() {
               </div>
             ))}
           </div>
+
+          <button
+            onClick={handleDownloadReport}
+            disabled={isGeneratingReport}
+            className={cn(
+              "w-full p-3 rounded-lg border border-accent/30 bg-accent/5 hover:bg-accent/10 transition-colors",
+              "flex items-center justify-center gap-2 text-[10px] font-mono uppercase tracking-widest text-accent",
+              isGeneratingReport && "opacity-60 cursor-wait"
+            )}
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            {isGeneratingReport ? 'Generando reporte...' : 'Descargar Reporte PDF (Análisis + Fórmulas)'}
+          </button>
         </div>
 
         {/* Right Sidebar - Asset Gravity / Country Sectors */}
