@@ -102,11 +102,10 @@ export async function GET(req: NextRequest) {
   // Fire-and-forget: persist snapshot for historical trend queries. Never blocks the response.
   if (supabaseAdmin) {
     const rows = results.filter(r => !r.error).map(r => ({
-      country, sector, regime, vix,
-      ticker: r.ticker, name: r.name, price: r.price, change_pct: r.changePct,
+      country, sector,
+      ticker: r.ticker, name: r.name, price: r.price,
       masa: r.masa, distancia: r.distancia, friccion: r.friccion, fuerza_g: r.fuerzaG,
-      institutional_pressure: r.institutionalPressure, options_pressure: r.optionsPressure,
-      gamma_flip: r.gammaFlip, put_call_ratio: r.putCallRatio, tier: r.tier, market_cap: r.marketCap,
+      tier: r.tier,
     }));
     if (rows.length > 0) {
       supabaseAdmin.from('g_history').insert(rows).then(({ error }) => {

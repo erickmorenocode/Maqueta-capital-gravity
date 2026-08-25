@@ -229,6 +229,100 @@ export function computeCompanyG(
   };
 }
 
+// ─── Compute G for a macro asset (index/ETF/future/crypto — no EPS/ROE/dividend) ──
+export function computeAssetG(
+  quote: YFQuote,
+  opts: OptionsResult,
+  vix: number,
+  us10y: number,
+  us2y: number,
+  move: number,
+  hygStress: number,
+  regime: string,
+  regimeMult: number,
+  weights: { w1: number; w2: number; w3: number; w4: number },
+): Omit<CompanyGravityResult, 'ticker' | 'name' | 'isGravityCenter' | 'tier' | 'error'> {
+  const price    = quote.regularMarketPrice         ?? 100;
+  const low52    = quote.fiftyTwoWeekLow            ?? price * 0.80;
+  const high52   = quote.fiftyTwoWeekHigh           ?? price * 1.20;
+  const avg50    = quote.fiftyDayAverage            ?? price;
+  const changePct = quote.regularMarketChangePercent ?? 0;
+  const vol      = quote.regularMarketVolume        ?? 0;
+  const avgVol   = (quote.averageDailyVolume3Month ?? vol) || 1;
+  const mktCap   = quote.marketCap                 ?? 1e9;
+
+  const rangeW    = high52 - low52;
+  const midPrice  = (high52 + low52) / 2;
+  const annualRange = midPrice > 0 ? (rangeW / midPrice) * 100 : 20;
+
+  // ── MASA: no Growth component (no EPS/ROE/dividend at index/future/crypto level) ──
+  const priceReturn = Math.round(rangeW > 0 ? clamp((price - low52) / rangeW * 100, 0, 100) : 50);
+  const momentum50d = Math.round(clamp((price / (avg50 || price) - 1) * 200 + 50, 0, 100));
+  const dailyReturn = Math.round(clamp(50 + changePct * 5, 0, 100));
+
+  const volumeScore = Math.round(clamp(vol / avgVol * 50, 0, 100));
+
+  const priceMomentum = avg50 > 0 ? (price / avg50 - 1) * 200 : 0;
+  const volSurge      = avgVol > 0 ? (vol / avgVol - 1) * 30 : 0;
+  const priceVolPress = clamp((priceMomentum * 0.5 + volSurge * 0.3 + changePct * 5 * 0.2) * regimeMult, -100, 100);
+
+  const optionsPressure = opts.optionsPressure;
+  const hasOptionsData = !(opts.optionsPressure === 0 && opts.putCallRatio === 1 && opts.gammaFlip === null);
+  const institutionalPressure = hasOptionsData
+    ? clamp(priceVolPress * 0.40 + optionsPressure * 0.60, -100, 100)
+    : clamp(priceVolPress, -100, 100);
+  const instScore = Math.round(clamp(50 + institutionalPressure * 0.3, 0, 100));
+
+  const Return     = priceReturn * 0.20 + momentum50d * 0.20 + dailyReturn * 0.30 + 50 * 0.30;
+  const Liquidity  = volumeScore;
+  const Confidence = momentum50d * 0.4 + instScore * 0.6;
+
+  // Growth-less renormalization: w1+w2 -> Return, w3 -> Liquidity, w4 -> Confidence
+  const wReturn = weights.w1 + weights.w2;
+  const masa = Math.round(clamp(wReturn * Return + weights.w3 * Liquidity + weights.w4 * Confidence, 0, 100));
+  const masaAdj = Math.round(clamp(masa + clamp(institutionalPressure / 5, -15, 15), 0, 100));
+
+  // ── DISTANCIA: same shape as computeCompanyG, no sector-ETF benchmark (sectorChangePct = 0) ──
+  const impliedVol  = annualRange * (vix / 20) * 0.40;
+  const histVol     = annualRange * 0.35;
+  const moveContrib = move > 0 ? move / 100 * 5 : 2;
+  const Volatilidad = clamp(impliedVol + histVol + moveContrib, 0, 60);
+
+  const betaPremium = Math.abs(changePct - 0) * 2;
+  const cpiBase     = 3.0;
+  const Spread      = hygStress * regimeMult * 0.3 + betaPremium * 0.3 + cpiBase * 0.5 + clamp((us10y - us2y) * 5, 0, 20);
+
+  const rho = regime === 'crisis' ? 0.85 : regime === 'risk-off' ? 0.70 : regime === 'risk-on' ? 0.35 : 0.50;
+  const distanciaRaw = Volatilidad + Spread + (1 - rho) * 30;
+  const distancia = Math.round(clamp(distanciaRaw / 1.2, 10, 90));
+
+  // ── FRICCIÓN: same shape, flat US-equivalent transaction cost (liquid USD instruments) ──
+  const bidAsk = quote.bid && quote.ask && quote.bid > 0 && price > 0
+    ? (quote.ask - quote.bid) / price * 100 * 20
+    : 1.0;
+  const slippage = clamp(15 - Math.log10(Math.max(mktCap, 1e6)) + 9, 0, 15) * 0.5;
+  const txCost   = COUNTRY_TX_COSTS['EE.UU.'] * 2;
+  const liqBonus = clamp((vol / Math.max(avgVol, 1) - 1) * 10, -10, 10);
+  const friccion = Math.round(clamp((bidAsk + slippage + txCost - liqBonus) * regimeMult, 1, 30));
+
+  const fuerzaG = parseFloat(((masaAdj - distancia) / Math.max(1, friccion)).toFixed(2));
+
+  return {
+    price,
+    changePct,
+    masa: masaAdj,
+    distancia,
+    friccion,
+    fuerzaG,
+    institutionalPressure: parseFloat(institutionalPressure.toFixed(1)),
+    optionsPressure: parseFloat(optionsPressure.toFixed(1)),
+    gammaFlip: opts.gammaFlip,
+    putCallRatio: parseFloat(opts.putCallRatio.toFixed(2)),
+    masaComponents: { retorno: priceReturn, crecimiento: 0, liquidez: volumeScore, confianza: Math.round(Confidence) },
+    marketCap: mktCap,
+  };
+}
+
 // ─── Regime classification from global macro quotes ───────────────────────────
 export interface MacroContext {
   vix: number; vixChg: number; us10y: number; us2y: number; move: number;

@@ -416,6 +416,20 @@ export interface CompanyGravityResult {
   error?: boolean;
 }
 
+export interface AssetClassEntry { ticker: string; name: string }
+
+export const ASSET_CLASSES: Record<string, { region: string; instruments: AssetClassEntry[] }> = {
+  usd:              { region: 'Global',              instruments: [{ ticker: 'DX-Y.NYB', name: 'US Dollar Index' }] },
+  north_america:    { region: 'Norteamérica',        instruments: [{ ticker: '^GSPC', name: 'S&P 500' }, { ticker: '^GSPTSE', name: 'TSX Composite' }] },
+  bonds:            { region: 'Global',              instruments: [{ ticker: 'TLT', name: 'iShares 20+ Year Treasury' }, { ticker: 'IEF', name: 'iShares 7-10 Year Treasury' }, { ticker: 'HYG', name: 'iShares High Yield Corporate' }] },
+  crypto:           { region: 'Global',              instruments: [{ ticker: 'BTC-USD', name: 'Bitcoin' }, { ticker: 'ETH-USD', name: 'Ethereum' }] },
+  gold:             { region: 'Global',              instruments: [{ ticker: 'GC=F', name: 'Gold Futures' }] },
+  europe:           { region: 'Europa',              instruments: [{ ticker: '^STOXX50E', name: 'Euro Stoxx 50' }] },
+  asia:             { region: 'Asia',                instruments: [{ ticker: '^N225', name: 'Nikkei 225' }, { ticker: '^HSI', name: 'Hang Seng' }] },
+  emerging_markets: { region: 'Mercados Emergentes', instruments: [{ ticker: 'EEM', name: 'iShares MSCI Emerging Markets' }] },
+  oil:              { region: 'Global',              instruments: [{ ticker: 'CL=F', name: 'WTI Crude Futures' }] },
+};
+
 export const COUNTRY_SECTOR_COMPANIES: Record<string, Record<string, CompanyRecommendation[]>> = {
   'EE.UU.': {
     technology:         [{ ticker:'AAPL', name:'Apple' },{ ticker:'MSFT', name:'Microsoft' },{ ticker:'NVDA', name:'Nvidia' },{ ticker:'GOOGL', name:'Alphabet' },{ ticker:'META', name:'Meta Platforms' },{ ticker:'AVGO', name:'Broadcom' },{ ticker:'ORCL', name:'Oracle' },{ ticker:'AMD', name:'AMD' },{ ticker:'QCOM', name:'Qualcomm' },{ ticker:'IBM', name:'IBM' }],
