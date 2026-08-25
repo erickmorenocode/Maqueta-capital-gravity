@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
 import { COUNTRY_SECTOR_COMPANIES } from '@/src/data';
 import type { CompanyGravityResult } from '@/src/data';
+import { supabaseAdmin } from '@/src/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -316,6 +317,22 @@ export async function GET(req: NextRequest) {
 
   // Sort by fuerzaG descending
   results.sort((a, b) => b.fuerzaG - a.fuerzaG);
+
+  // Fire-and-forget: persist snapshot for historical trend queries. Never blocks the response.
+  if (supabaseAdmin) {
+    const rows = results.filter(r => !r.error).map(r => ({
+      country, sector, regime, vix,
+      ticker: r.ticker, name: r.name, price: r.price, change_pct: r.changePct,
+      masa: r.masa, distancia: r.distancia, friccion: r.friccion, fuerza_g: r.fuerzaG,
+      institutional_pressure: r.institutionalPressure, options_pressure: r.optionsPressure,
+      gamma_flip: r.gammaFlip, put_call_ratio: r.putCallRatio, tier: r.tier, market_cap: r.marketCap,
+    }));
+    if (rows.length > 0) {
+      supabaseAdmin.from('g_history').insert(rows).then(({ error }) => {
+        if (error) console.error('[supabase] g_history insert failed:', error.message);
+      });
+    }
+  }
 
   return NextResponse.json({
     country, sector, regime, vix, results,
