@@ -37,6 +37,7 @@ const ASSET_SYMBOLS: Record<string, string> = {
   Gold:               'GC=F',
   'Norte America':    'QQQ',
   Asia:               'EWJ',
+  'Corea del Sur':    'EWY',
   Bonds:              'TLT',
   Crypto:             'BTC-USD',
   Oil:                'CL=F',
@@ -50,6 +51,7 @@ const ASSET_BASE: Record<string, AssetBase> = {
   Gold:               { liquidez: 85, friccion: 8,  correlacion: 0.50, spreadBase: 10 },
   'Norte America':    { liquidez: 88, friccion: 6,  correlacion: 0.90, spreadBase: 15 },
   Asia:               { liquidez: 72, friccion: 14, correlacion: 0.70, spreadBase: 28 },
+  'Corea del Sur':    { liquidez: 68, friccion: 16, correlacion: 0.72, spreadBase: 30 },
   Bonds:              { liquidez: 90, friccion: 7,  correlacion: 0.40, spreadBase: 12 },
   Crypto:             { liquidez: 70, friccion: 15, correlacion: 0.55, spreadBase: 30 },
   Oil:                { liquidez: 80, friccion: 10, correlacion: 0.60, spreadBase: 20 },
@@ -822,7 +824,7 @@ interface OptionsMetrics {
 const OPTIONS_ZERO: OptionsMetrics = { netGex: 0, putCallRatio: 1, gammaFlip: null, optionsPressure: 0 };
 const OPTIONS_SYMS = [
   ...Object.values(SECTOR_SYMBOLS),
-  'QQQ', 'GLD', 'TLT', 'EEM', 'EZU', 'EWJ', 'IBIT', 'USO', 'UUP',
+  'QQQ', 'GLD', 'TLT', 'EEM', 'EZU', 'EWJ', 'EWY', 'IBIT', 'USO', 'UUP',
 ];
 
 function bsGamma(S: number, K: number, T: number, r: number, sigma: number): number {
@@ -936,9 +938,20 @@ function classifyNews(title: string): NewsCategory {
 // no rule ever applies from a static table alone. `reasons` carries the exact
 // headline that triggered each tilt, so every adjustment is traceable to real news.
 interface NewsFlowTarget { kind: 'asset' | 'sector'; id: string; tilt: number }
-interface NewsFlowRule { keywords: string[]; targets: NewsFlowTarget[]; label: string }
+interface NewsFlowRule {
+  keywords?: string[];   // OR-match: any one keyword fires the rule
+  requireAll?: string[]; // AND-match: every term must appear (for compound conditions)
+  targets: NewsFlowTarget[];
+  label: string;
+}
+
+function ruleMatches(rule: NewsFlowRule, title: string): boolean {
+  if (rule.requireAll) return rule.requireAll.every(k => hasWord(title, k));
+  return (rule.keywords ?? []).some(k => hasWord(title, k));
+}
 
 const NEWS_FLOW_RULES: NewsFlowRule[] = [
+  // ── Geopolitics ──────────────────────────────────────────────────────────
   {
     keywords: ['war', 'conflict', 'invasion', 'military', 'airstrike', 'missile', 'coup'],
     targets: [
@@ -946,12 +959,40 @@ const NEWS_FLOW_RULES: NewsFlowRule[] = [
       { kind: 'asset', id: 'Bonds', tilt: 8 },
       { kind: 'asset', id: 'Emerging Markets', tilt: -10 },
     ],
-    label: 'conflicto armado / tension geopolitica',
+    label: 'conflicto armado / tension geopolitica (refugio clasico)',
+  },
+  // Oil-supply-chokepoint shock: distinct from generic conflict above -- oil goes up,
+  // but the resulting inflation risk pushes the Fed to stay tight, so USD strengthens
+  // and gold (non-yielding, priced in USD) does NOT automatically rally with it.
+  {
+    requireAll: ['oil', 'iran'],
+    targets: [
+      { kind: 'asset', id: 'Oil', tilt: 15 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+      { kind: 'asset', id: 'Gold', tilt: -5 },
+      { kind: 'asset', id: 'Bonds', tilt: -5 },
+    ],
+    label: 'shock de oferta de petroleo en Iran (riesgo inflacionario -> USD sube, oro y bonos bajan)',
   },
   {
-    keywords: ['iran', 'middle east', 'strait of hormuz', 'opec'],
-    targets: [{ kind: 'asset', id: 'Oil', tilt: 15 }],
-    label: 'riesgo de suministro de petroleo en Medio Oriente',
+    requireAll: ['oil', 'middle east'],
+    targets: [
+      { kind: 'asset', id: 'Oil', tilt: 15 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+      { kind: 'asset', id: 'Gold', tilt: -5 },
+      { kind: 'asset', id: 'Bonds', tilt: -5 },
+    ],
+    label: 'shock de oferta de petroleo en Medio Oriente (riesgo inflacionario -> USD sube, oro y bonos bajan)',
+  },
+  {
+    keywords: ['strait of hormuz'],
+    targets: [
+      { kind: 'asset', id: 'Oil', tilt: 15 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+      { kind: 'asset', id: 'Gold', tilt: -5 },
+      { kind: 'asset', id: 'Bonds', tilt: -5 },
+    ],
+    label: 'bloqueo del Estrecho de Ormuz (riesgo inflacionario -> USD sube, oro y bonos bajan)',
   },
   {
     keywords: ['sanction', 'tariff', 'trade war'],
@@ -961,6 +1002,8 @@ const NEWS_FLOW_RULES: NewsFlowRule[] = [
     ],
     label: 'sanciones / tension comercial',
   },
+
+  // ── Bancos centrales / tasas ─────────────────────────────────────────────
   {
     keywords: ['rate hike', 'rate hikes', 'rate increase', 'rate increases', 'hawkish', 'raise rates', 'raising rates', 'tightening'],
     targets: [
@@ -979,14 +1022,143 @@ const NEWS_FLOW_RULES: NewsFlowRule[] = [
     ],
     label: 'postura dovish de banco central / recorte de tasas',
   },
+  // 10-year yield reaction -- applies to any headline about treasury/bond yield moves
+  // (not just US-labeled ones; US Treasury yields are the global rate benchmark).
   {
-    keywords: ['recession', 'layoffs', 'unemployment', 'jobs report'],
+    keywords: ['yields rise', 'yields jump', 'yields surge', 'yield spike', 'yields climb', 'treasury yields rise'],
+    targets: [
+      { kind: 'asset', id: 'USD', tilt: 6 },
+      { kind: 'asset', id: 'Bonds', tilt: -8 },
+    ],
+    label: 'yields del Tesoro (10 anos) al alza',
+  },
+  {
+    keywords: ['yields fall', 'yields drop', 'yields decline', 'yields plunge', 'yields ease'],
+    targets: [
+      { kind: 'asset', id: 'USD', tilt: -6 },
+      { kind: 'asset', id: 'Bonds', tilt: 8 },
+    ],
+    label: 'yields del Tesoro (10 anos) a la baja',
+  },
+
+  // ── Economia real ────────────────────────────────────────────────────────
+  {
+    keywords: ['recession', 'layoffs', 'unemployment'],
     targets: [
       { kind: 'sector', id: 'cons_staples', tilt: 6 },
       { kind: 'sector', id: 'cons_discretionary', tilt: -8 },
       { kind: 'sector', id: 'financial', tilt: -6 },
     ],
     label: 'senales de debilidad economica',
+  },
+  {
+    keywords: ['debt ceiling', 'government shutdown'],
+    targets: [
+      { kind: 'asset', id: 'USD', tilt: -6 },
+      { kind: 'asset', id: 'Gold', tilt: 8 },
+      { kind: 'asset', id: 'Bonds', tilt: -6 },
+    ],
+    label: 'riesgo fiscal de EE.UU.',
+  },
+
+  // ── Sectores / tematicas especificas ────────────────────────────────────
+  {
+    keywords: ['ai spending', 'data center demand', 'chip demand', 'semiconductor boom', 'ai infrastructure'],
+    targets: [{ kind: 'sector', id: 'technology', tilt: 10 }],
+    label: 'auge de gasto en IA / semiconductores',
+  },
+  {
+    keywords: ['bank failure', 'bank collapse', 'credit crunch', 'deposit flight', 'bank run'],
+    targets: [
+      { kind: 'sector', id: 'financial', tilt: -15 },
+      { kind: 'asset', id: 'Bonds', tilt: 10 },
+      { kind: 'asset', id: 'Gold', tilt: 8 },
+    ],
+    label: 'estres bancario / crisis de credito',
+  },
+  {
+    keywords: ['crypto etf', 'bitcoin etf approval', 'crypto etf approval'],
+    targets: [{ kind: 'asset', id: 'Crypto', tilt: 12 }],
+    label: 'regulacion cripto favorable',
+  },
+  {
+    keywords: ['crypto crackdown', 'crypto ban', 'sec lawsuit crypto'],
+    targets: [{ kind: 'asset', id: 'Crypto', tilt: -12 }],
+    label: 'regulacion cripto adversa',
+  },
+  {
+    keywords: ['opec cuts', 'opec+ cuts', 'production cut'],
+    targets: [{ kind: 'asset', id: 'Oil', tilt: 10 }],
+    label: 'recorte de produccion OPEP',
+  },
+  {
+    keywords: ['oil glut', 'opec increases production', 'supply surplus'],
+    targets: [{ kind: 'asset', id: 'Oil', tilt: -10 }],
+    label: 'exceso de oferta de petroleo',
+  },
+  {
+    keywords: ['fda approval', 'drug approval'],
+    targets: [{ kind: 'sector', id: 'healthcare', tilt: 6 }],
+    label: 'aprobacion regulatoria en salud',
+  },
+  {
+    keywords: ['fda rejection', 'trial failure', 'clinical trial fail'],
+    targets: [{ kind: 'sector', id: 'healthcare', tilt: -6 }],
+    label: 'rechazo regulatorio / fallo de ensayo clinico en salud',
+  },
+
+  // ── China / Japon / Corea del Sur (motores de Asia y Emergentes) ────────
+  {
+    keywords: ['china property crisis', 'china slowdown', 'evergrande'],
+    targets: [
+      { kind: 'sector', id: 'basic_materials', tilt: -8 },
+      { kind: 'asset', id: 'Emerging Markets', tilt: -8 },
+      { kind: 'asset', id: 'Asia', tilt: -6 },
+    ],
+    label: 'desaceleracion economica de China',
+  },
+  {
+    keywords: ['china stimulus'],
+    targets: [
+      { kind: 'sector', id: 'basic_materials', tilt: 8 },
+      { kind: 'asset', id: 'Emerging Markets', tilt: 8 },
+      { kind: 'asset', id: 'Asia', tilt: 6 },
+    ],
+    label: 'estimulo economico de China',
+  },
+  {
+    keywords: ['japan recession', 'japan slowdown', 'boj intervention', 'yen crisis'],
+    targets: [
+      { kind: 'asset', id: 'Asia', tilt: -6 },
+      { kind: 'sector', id: 'technology', tilt: -4 },
+    ],
+    label: 'debilidad economica de Japon',
+  },
+  {
+    keywords: ['japan stimulus', 'japan growth', 'boj easing'],
+    targets: [
+      { kind: 'asset', id: 'Asia', tilt: 6 },
+      { kind: 'sector', id: 'technology', tilt: 4 },
+    ],
+    label: 'estimulo / fortaleza economica de Japon',
+  },
+  {
+    keywords: ['south korea slowdown', 'korea export decline', 'korea recession'],
+    targets: [
+      { kind: 'asset', id: 'Corea del Sur', tilt: -10 },
+      { kind: 'sector', id: 'technology', tilt: -5 },
+      { kind: 'sector', id: 'basic_materials', tilt: -4 },
+    ],
+    label: 'debilidad economica de Corea del Sur',
+  },
+  {
+    keywords: ['south korea growth', 'korea export surge', 'korea stimulus'],
+    targets: [
+      { kind: 'asset', id: 'Corea del Sur', tilt: 10 },
+      { kind: 'sector', id: 'technology', tilt: 5 },
+      { kind: 'sector', id: 'basic_materials', tilt: 4 },
+    ],
+    label: 'fortaleza economica de Corea del Sur',
   },
 ];
 
@@ -996,7 +1168,7 @@ function computeNewsFlowSignal(pool: Array<{ title: string }>): NewsFlowResult {
   const assetTilts: NewsFlowResult['assetTilts'] = {};
   const sectorTilts: NewsFlowResult['sectorTilts'] = {};
   for (const rule of NEWS_FLOW_RULES) {
-    const hit = pool.find(h => rule.keywords.some(k => hasWord(h.title, k)));
+    const hit = pool.find(h => ruleMatches(rule, h.title));
     if (!hit) continue; // no real headline matched -- rule contributes nothing today
     const reason = `${rule.label}: "${hit.title}"`;
     for (const t of rule.targets) {
@@ -1209,6 +1381,7 @@ export async function GET() {
       'Gold':             ap('GLD',      'GLD'),
       'Norte America':    clamp(ap('QQQ', 'QQQ') * 0.6 + ap('SPY') * 0.4, -100, 100),
       'Asia':             clamp(ap('EWJ', 'EWJ') * 0.6 + ap('^N225') * 0.4, -100, 100),
+      'Corea del Sur':    ap('EWY', 'EWY'),
       'Bonds':            clamp(
         ap('TLT', 'TLT') * 0.50 +
         ap('ZB=F')        * 0.30 +
