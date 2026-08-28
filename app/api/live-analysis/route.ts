@@ -2,6 +2,7 @@
 import YahooFinance from 'yahoo-finance2';
 import { GoogleGenAI } from '@google/genai';
 import type { MarketScenario, GravityMetrics, CapitalFlow } from '@/src/data';
+import { supabaseAdmin } from '@/src/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -631,6 +632,7 @@ async function generateAIDescription(
     nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
   }>,
   newsFlowSignal?: Record<string, { tilt: number; reasons: string[] }>,
+  newsFlowFirings?: NewsFlowFiring[],
 ): Promise<string> {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -641,6 +643,32 @@ async function generateAIDescription(
     const now = Date.now();
     if (geminiCache && geminiCache.key === cacheKey && now - geminiCache.ts < GEMINI_TTL_MS) {
       return geminiCache.text;
+    }
+
+    // Persist news-flow rule firings at most once per ~55 min, gated by a real query
+    // against Supabase -- not the in-memory geminiCache below. That cache only ever
+    // gets set after a *successful* Gemini call, so while Gemini is erroring (503s)
+    // every request looks like a "cache miss" and would insert duplicates forever.
+    // A DB-anchored gate also survives Vercel cold starts, where module-level state
+    // (geminiCache) does not.
+    if (supabaseAdmin && newsFlowFirings && newsFlowFirings.length > 0) {
+      const since = new Date(Date.now() - 55 * 60 * 1000).toISOString();
+      const { data: recent, error: checkError } = await supabaseAdmin
+        .from('news_flow_events')
+        .select('id')
+        .gte('created_at', since)
+        .limit(1);
+      if (checkError) {
+        console.error('[supabase] news_flow_events recency check failed:', checkError.message);
+      } else if (!recent || recent.length === 0) {
+        const rows = newsFlowFirings.map(f => ({
+          rule_label: f.ruleLabel, target_kind: f.kind, target_id: f.id,
+          tilt: f.tilt, headline: f.headline, headline_url: f.url ?? null,
+        }));
+        supabaseAdmin.from('news_flow_events').insert(rows).then(({ error }) => {
+          if (error) console.error('[supabase] news_flow_events insert failed:', error.message);
+        });
+      }
     }
 
     const gcDetails = gravityCenters.length
@@ -1162,11 +1190,17 @@ const NEWS_FLOW_RULES: NewsFlowRule[] = [
   },
 ];
 
-interface NewsFlowResult { assetTilts: Record<string, { tilt: number; reasons: string[] }>; sectorTilts: Record<string, { tilt: number; reasons: string[] }> }
+interface NewsFlowFiring { ruleLabel: string; kind: 'asset' | 'sector'; id: string; tilt: number; headline: string; url?: string }
+interface NewsFlowResult {
+  assetTilts: Record<string, { tilt: number; reasons: string[] }>;
+  sectorTilts: Record<string, { tilt: number; reasons: string[] }>;
+  firings: NewsFlowFiring[]; // one entry per (rule, target) match, for persistence
+}
 
-function computeNewsFlowSignal(pool: Array<{ title: string }>): NewsFlowResult {
+function computeNewsFlowSignal(pool: Array<{ title: string; url?: string }>): NewsFlowResult {
   const assetTilts: NewsFlowResult['assetTilts'] = {};
   const sectorTilts: NewsFlowResult['sectorTilts'] = {};
+  const firings: NewsFlowFiring[] = [];
   for (const rule of NEWS_FLOW_RULES) {
     const hit = pool.find(h => ruleMatches(rule, h.title));
     if (!hit) continue; // no real headline matched -- rule contributes nothing today
@@ -1176,12 +1210,13 @@ function computeNewsFlowSignal(pool: Array<{ title: string }>): NewsFlowResult {
       bucket[t.id] ??= { tilt: 0, reasons: [] };
       bucket[t.id].tilt += t.tilt;
       bucket[t.id].reasons.push(reason);
+      firings.push({ ruleLabel: rule.label, kind: t.kind, id: t.id, tilt: t.tilt, headline: hit.title, url: hit.url });
     }
   }
   for (const bucket of [assetTilts, sectorTilts]) {
     for (const id of Object.keys(bucket)) bucket[id].tilt = clamp(bucket[id].tilt, -30, 30);
   }
-  return { assetTilts, sectorTilts };
+  return { assetTilts, sectorTilts, firings };
 }
 
 function scoreTitle(title: string): number {
@@ -1540,7 +1575,7 @@ export async function GET() {
     const aiDescription = await generateAIDescription(
       regime, vix, us10y, gravityCenters, metrics,
       newsHeadlines, assetPressures, rotationResult.signal,
-      countrySectorData, newsFlowSignal,
+      countrySectorData, newsFlowSignal, newsFlow.firings,
     );
 
     const scenario: MarketScenario = {

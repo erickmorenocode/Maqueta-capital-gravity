@@ -28,3 +28,24 @@ alter table g_history enable row level security;
 
 -- Reads open (dashboard is public); writes only via service role key from API routes.
 create policy "g_history_select_public" on g_history for select using (true);
+
+-- News -> capital-flow rule firings: one row per (rule, target) that a real headline
+-- actually triggered in live-analysis. Written once per fresh AI-analysis regeneration
+-- (gated by the same 60-min cache as the Gemini call), not on every request, so opening
+-- the dashboard repeatedly doesn't flood this table with duplicate rows.
+create table if not exists news_flow_events (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  rule_label text not null,
+  target_kind text not null,
+  target_id text not null,
+  tilt numeric not null,
+  headline text not null,
+  headline_url text
+);
+
+create index if not exists news_flow_events_target_idx on news_flow_events (target_id, created_at desc);
+
+alter table news_flow_events enable row level security;
+
+create policy "news_flow_events_select_public" on news_flow_events for select using (true);
