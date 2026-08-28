@@ -107,6 +107,7 @@ export interface MarketScenario {
   }>;
   rotationSignal?: string;
   newsContext?: NewsContext;
+  newsFlowSignal?: Record<string, { tilt: number; reasons: string[] }>;
 }
 
 export const DEFAULT_PRICES: MarketPrices = {

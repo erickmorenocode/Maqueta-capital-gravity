@@ -628,6 +628,7 @@ async function generateAIDescription(
   countrySectorData?: Record<string, {
     nodes: Array<{ id: string; masa: number; distancia: number; isGravityCenter: boolean }>;
   }>,
+  newsFlowSignal?: Record<string, { tilt: number; reasons: string[] }>,
 ): Promise<string> {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -661,6 +662,13 @@ async function generateAIDescription(
     const companyNewsText = newsBlock('empresas');
     const geoNewsText     = newsBlock('geopolitica');
     const econNewsText    = newsBlock('economia');
+
+    const newsFlowText = newsFlowSignal && Object.keys(newsFlowSignal).length > 0
+      ? Object.entries(newsFlowSignal)
+          .sort((a, b) => Math.abs(b[1].tilt) - Math.abs(a[1].tilt))
+          .map(([id, v]) => `${id}: ${v.tilt > 0 ? '+' : ''}${v.tilt} -- ${v.reasons.join('; ')}`)
+          .join('\n')
+      : '(ninguna regla de flujo por noticias se activo hoy)';
 
     // Top G7 sectors by gravity force
     const SECTOR_LABELS: Record<string, string> = {
@@ -705,6 +713,8 @@ ${geoNewsText}
 NOTICIAS DE ECONOMIA Y BANCOS CENTRALES -- inflacion, Fed, BCE, BoE, BoJ, BoC, tasas (${headlines.filter(h => h.category === 'economia').length} titulares):
 ${econNewsText}
 
+SENALES DE FLUJO POR NOTICIAS (reglas activadas hoy por titulares reales -- tilt en puntos, positivo = entra capital, negativo = sale capital):
+${newsFlowText}
 
 SECTORES LIDERES POR PAIS G7 (centros de gravedad activos, Sector(M=masa,d=distancia)):
 ${countrySectorSummary}
@@ -712,7 +722,7 @@ ${countrySectorSummary}
 Escribe un análisis en español de 5 párrafos cortos. Cada párrafo separado por una línea en blanco. Sin markdown, sin viñetas, sin encabezados.
 
 Párrafo 1 — Interpretación de noticias: qué narrativa emerge de las tres categorías (empresas, geopolítica, economía/bancos centrales) y cómo se combinan para afectar el sentimiento de mercado hoy.
-Párrafo 2 — Justificación de centros de gravedad: explica por qué exactamente esos activos/mercados están atrayendo capital HOY, citando sus valores MASA/distancia/G y conectándolos explícitamente con noticias concretas de empresas, geopolítica y economía/bancos centrales (inflación, decisiones de tasas) cuando aplique — no te quedes en lo genérico, nombra la noticia y el activo.
+Párrafo 2 — Justificación de centros de gravedad: explica por qué exactamente esos activos/mercados están atrayendo capital HOY, citando sus valores MASA/distancia/G y conectándolos explícitamente con noticias concretas de empresas, geopolítica y economía/bancos centrales (inflación, decisiones de tasas) cuando aplique, y con las SEÑALES DE FLUJO POR NOTICIAS si hay alguna activada — no te quedes en lo genérico, nombra la noticia y el activo.
 Párrafo 3 — Activos que pierden capital: cuáles tienen la menor Fuerza G, por qué el capital sale de ahí, y qué noticias (de cualquiera de las tres categorías) o métricas lo explican.
 Párrafo 4 — Sectores por países G7: analiza cuáles sectores dominan en qué países (usando los datos de SECTORES LIDERES POR PAIS). Identifica divergencias entre economías G7 y qué implica para la rotación de capital internacional. Menciona al menos 3 países con sus sectores líderes y valores MASA/distancia.
 Párrafo 5 — Posicionamiento estratégico: qué sugiere el modelo para el posicionamiento de capital en las próximas horas/días, dado el régimen ${regime} y las señales actuales.
@@ -919,6 +929,87 @@ function classifyNews(title: string): NewsCategory {
   for (const w of GEO_KEYWORDS) if (hasWord(title, w)) return 'geopolitica';
   for (const w of ECON_KEYWORDS) if (hasWord(title, w)) return 'economia';
   return 'empresas';
+}
+
+// ─── News → capital-flow rules ─────────────────────────────────────────────
+// A rule only fires if a REAL fetched headline today contains one of its keywords --
+// no rule ever applies from a static table alone. `reasons` carries the exact
+// headline that triggered each tilt, so every adjustment is traceable to real news.
+interface NewsFlowTarget { kind: 'asset' | 'sector'; id: string; tilt: number }
+interface NewsFlowRule { keywords: string[]; targets: NewsFlowTarget[]; label: string }
+
+const NEWS_FLOW_RULES: NewsFlowRule[] = [
+  {
+    keywords: ['war', 'conflict', 'invasion', 'military', 'airstrike', 'missile', 'coup'],
+    targets: [
+      { kind: 'asset', id: 'Gold', tilt: 12 },
+      { kind: 'asset', id: 'Bonds', tilt: 8 },
+      { kind: 'asset', id: 'Emerging Markets', tilt: -10 },
+    ],
+    label: 'conflicto armado / tension geopolitica',
+  },
+  {
+    keywords: ['iran', 'middle east', 'strait of hormuz', 'opec'],
+    targets: [{ kind: 'asset', id: 'Oil', tilt: 15 }],
+    label: 'riesgo de suministro de petroleo en Medio Oriente',
+  },
+  {
+    keywords: ['sanction', 'tariff', 'trade war'],
+    targets: [
+      { kind: 'asset', id: 'Emerging Markets', tilt: -8 },
+      { kind: 'sector', id: 'industrials', tilt: -5 },
+    ],
+    label: 'sanciones / tension comercial',
+  },
+  {
+    keywords: ['rate hike', 'rate hikes', 'rate increase', 'rate increases', 'hawkish', 'raise rates', 'raising rates', 'tightening'],
+    targets: [
+      { kind: 'asset', id: 'Bonds', tilt: -12 },
+      { kind: 'sector', id: 'technology', tilt: -6 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+    ],
+    label: 'postura hawkish de banco central / tasas al alza',
+  },
+  {
+    keywords: ['rate cut', 'rate cuts', 'dovish', 'cutting rates', 'lower rates', 'easing'],
+    targets: [
+      { kind: 'asset', id: 'Bonds', tilt: 12 },
+      { kind: 'sector', id: 'technology', tilt: 6 },
+      { kind: 'asset', id: 'USD', tilt: -6 },
+    ],
+    label: 'postura dovish de banco central / recorte de tasas',
+  },
+  {
+    keywords: ['recession', 'layoffs', 'unemployment', 'jobs report'],
+    targets: [
+      { kind: 'sector', id: 'cons_staples', tilt: 6 },
+      { kind: 'sector', id: 'cons_discretionary', tilt: -8 },
+      { kind: 'sector', id: 'financial', tilt: -6 },
+    ],
+    label: 'senales de debilidad economica',
+  },
+];
+
+interface NewsFlowResult { assetTilts: Record<string, { tilt: number; reasons: string[] }>; sectorTilts: Record<string, { tilt: number; reasons: string[] }> }
+
+function computeNewsFlowSignal(pool: Array<{ title: string }>): NewsFlowResult {
+  const assetTilts: NewsFlowResult['assetTilts'] = {};
+  const sectorTilts: NewsFlowResult['sectorTilts'] = {};
+  for (const rule of NEWS_FLOW_RULES) {
+    const hit = pool.find(h => rule.keywords.some(k => hasWord(h.title, k)));
+    if (!hit) continue; // no real headline matched -- rule contributes nothing today
+    const reason = `${rule.label}: "${hit.title}"`;
+    for (const t of rule.targets) {
+      const bucket = t.kind === 'asset' ? assetTilts : sectorTilts;
+      bucket[t.id] ??= { tilt: 0, reasons: [] };
+      bucket[t.id].tilt += t.tilt;
+      bucket[t.id].reasons.push(reason);
+    }
+  }
+  for (const bucket of [assetTilts, sectorTilts]) {
+    for (const id of Object.keys(bucket)) bucket[id].tilt = clamp(bucket[id].tilt, -30, 30);
+  }
+  return { assetTilts, sectorTilts };
 }
 
 function scoreTitle(title: string): number {
@@ -1133,6 +1224,12 @@ export async function GET() {
       assetPressures[id] = clamp((assetPressures[id] ?? 0) + newsBoost, -100, 100);
     }
 
+    // News → flow rules: targeted tilts, only from rules matched by a real headline today
+    const newsFlow = computeNewsFlowSignal(scoredNews);
+    for (const [id, t] of Object.entries(newsFlow.assetTilts)) {
+      assetPressures[id] = clamp((assetPressures[id] ?? 0) + t.tilt, -100, 100);
+    }
+
     // â”€â”€ Asset metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const rawAssets: Record<string, RawAssetMetrics> = {};
     for (const [id, sym] of Object.entries(ASSET_SYMBOLS)) {
@@ -1193,6 +1290,9 @@ export async function GET() {
     const sectorPressures: Record<string, number> = {};
     for (const [sectorId, sym] of Object.entries(SECTOR_SYMBOLS)) {
       sectorPressures[sectorId] = blend(computeInstitutionalPressure(quoteMap[sym] ?? {}, regimeMult), sym);
+    }
+    for (const [id, t] of Object.entries(newsFlow.sectorTilts)) {
+      sectorPressures[id] = clamp((sectorPressures[id] ?? 0) + t.tilt, -100, 100);
     }
     const auxPressures = {
       gold:         blend(computeInstitutionalPressure(quoteMap[ASSET_SYMBOLS['Gold']]          ?? {}, regimeMult), 'GLD'),
@@ -1259,10 +1359,15 @@ export async function GET() {
     }));
     const newsSentiment = titleSentiment(newsAvgScore > 0.5 ? 1 : newsAvgScore < -0.5 ? -1 : 0);
 
+    const newsFlowSignal: Record<string, { tilt: number; reasons: string[] }> = {
+      ...newsFlow.assetTilts,
+      ...newsFlow.sectorTilts,
+    };
+
     const aiDescription = await generateAIDescription(
       regime, vix, us10y, gravityCenters, metrics,
       newsHeadlines, assetPressures, rotationResult.signal,
-      countrySectorData,
+      countrySectorData, newsFlowSignal,
     );
 
     const scenario: MarketScenario = {
@@ -1278,6 +1383,7 @@ export async function GET() {
       countrySectorData,
       lastUpdated:      Date.now(),
       rotationSignal:   rotationResult.signal,
+      newsFlowSignal,
       newsContext: {
         headlines:      newsHeadlines,
         sentimentScore: newsSentimentScore,
