@@ -10,12 +10,14 @@ create table if not exists g_history (
   asset_class text,
   ticker text not null,
   name text not null,
+  open numeric not null,
   price numeric not null,
   masa numeric not null,
   distancia numeric not null,
   friccion numeric not null,
   fuerza_g numeric not null,
-  tier text not null
+  tier text not null,
+  geo_events jsonb
 );
 
 create index if not exists g_history_ticker_created_idx on g_history (ticker, created_at desc);

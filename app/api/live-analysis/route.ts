@@ -622,7 +622,7 @@ async function generateAIDescription(
   us10y: number,
   gravityCenters: string[],
   metrics: Record<string, GravityMetrics>,
-  headlines: Array<{ title: string; source: string; sentiment: string }>,
+  headlines: Array<{ title: string; source: string; sentiment: string; category: NewsCategory }>,
   assetPressures: Record<string, number>,
   rotationSignal: string,
   countrySectorData?: Record<string, {
@@ -644,18 +644,23 @@ async function generateAIDescription(
       ? gravityCenters.map(id => {
           const m = metrics[id];
           if (!m) return `${id}: sin datos`;
-          return `${id}: MASA=${m.masa} Â· distancia=${m.distancia} Â· G=${m.fuerzaG?.toFixed(2) ?? 'n/a'} Â· presiÃ³n_institucional=${(assetPressures[id] ?? 0).toFixed(0)}`;
+          return `${id}: MASA=${m.masa} · distancia=${m.distancia} · G=${m.fuerzaG?.toFixed(2) ?? 'n/a'} · presión_institucional=${(assetPressures[id] ?? 0).toFixed(0)}`;
         }).join('\n')
-      : 'Ninguno supera el umbral dinÃ¡mico (media+0.5Ïƒ)';
+      : 'Ninguno supera el umbral dinámico (media+0.5σ)';
 
     const allAssetsRanked = Object.entries(metrics)
       .sort((a, b) => (b[1].fuerzaG ?? 0) - (a[1].fuerzaG ?? 0))
       .map(([id, m]) => `${id}: MASA=${m.masa} d=${m.distancia} G=${m.fuerzaG?.toFixed(2) ?? 'n/a'}`)
       .join(' | ');
 
-    const newsText = headlines.slice(0, 10)
-      .map(h => `[${h.sentiment.toUpperCase()}] ${h.title} â€” ${h.source}`)
-      .join('\n');
+    const newsBlock = (cat: NewsCategory) => {
+      const items = headlines.filter(h => h.category === cat);
+      if (items.length === 0) return '(sin titulares en esta categoria hoy)';
+      return items.map(h => `[${h.sentiment.toUpperCase()}] ${h.title} -- ${h.source}`).join('\n');
+    };
+    const companyNewsText = newsBlock('empresas');
+    const geoNewsText     = newsBlock('geopolitica');
+    const econNewsText    = newsBlock('economia');
 
     // Top G7 sectors by gravity force
     const SECTOR_LABELS: Record<string, string> = {
@@ -679,33 +684,40 @@ async function generateAIDescription(
       : 'No disponible';
 
     const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
-    const prompt = `Eres un analista cuantitativo de mercados financieros especializado en el modelo de Gravedad de Capital (G = (MASA âˆ’ distancia) / fricciÃ³n).
+    const prompt = `Eres un analista cuantitativo de mercados financieros especializado en el modelo de Gravedad de Capital (G = (MASA − distancia) / fricción).
 
 FECHA: ${today}
-RÃ‰GIMEN MACRO: ${regime.toUpperCase()} | VIX: ${vix.toFixed(1)} | US10Y: ${us10y.toFixed(2)}% | RotaciÃ³n: ${rotationSignal}
+RÉGIMEN MACRO: ${regime.toUpperCase()} | VIX: ${vix.toFixed(1)} | US10Y: ${us10y.toFixed(2)}% | Rotación: ${rotationSignal}
 
-CENTROS DE GRAVEDAD ACTUALES (activos con G â‰¥ media+0.5Ïƒ del escenario):
+CENTROS DE GRAVEDAD ACTUALES (activos con G ≥ media+0.5σ del escenario):
 ${gcDetails}
 
 TODOS LOS ACTIVOS RANKEADOS POR FUERZA G:
 ${allAssetsRanked}
 
-NOTICIAS DEL DÃA (${headlines.length} titulares analizados):
-${newsText}
+Ã
+NOTICIAS DE EMPRESAS (${headlines.filter(h => h.category === 'empresas').length} titulares):
+${companyNewsText}
+
+NOTICIAS GEOPOLITICAS (${headlines.filter(h => h.category === 'geopolitica').length} titulares):
+${geoNewsText}
+
+NOTICIAS DE ECONOMIA Y BANCOS CENTRALES -- inflacion, Fed, BCE, BoE, BoJ, BoC, tasas (${headlines.filter(h => h.category === 'economia').length} titulares):
+${econNewsText}
 
 
 SECTORES LIDERES POR PAIS G7 (centros de gravedad activos, Sector(M=masa,d=distancia)):
 ${countrySectorSummary}
 
-Escribe un anÃ¡lisis en espaÃ±ol de 5 pÃ¡rrafos cortos. Cada pÃ¡rrafo separado por una lÃ­nea en blanco. Sin markdown, sin viÃ±etas, sin encabezados.
+Escribe un análisis en español de 5 párrafos cortos. Cada párrafo separado por una línea en blanco. Sin markdown, sin viñetas, sin encabezados.
 
-PÃ¡rrafo 1 â€” InterpretaciÃ³n de noticias: quÃ© narrativa macroeconÃ³mica emergen de los titulares y cÃ³mo afectan el sentimiento de mercado hoy.
-PÃ¡rrafo 2 â€” JustificaciÃ³n de centros de gravedad: explica por quÃ© exactamente esos activos/mercados estÃ¡n atrayendo capital HOY, citando sus valores MASA/distancia/G y conectÃ¡ndolos con las noticias relevantes.
-PÃ¡rrafo 3 â€” Activos que pierden capital: cuÃ¡les tienen la menor Fuerza G, por quÃ© el capital sale de ahÃ­, y quÃ© noticias o mÃ©tricas lo explican.
+Párrafo 1 — Interpretación de noticias: qué narrativa emerge de las tres categorías (empresas, geopolítica, economía/bancos centrales) y cómo se combinan para afectar el sentimiento de mercado hoy.
+Párrafo 2 — Justificación de centros de gravedad: explica por qué exactamente esos activos/mercados están atrayendo capital HOY, citando sus valores MASA/distancia/G y conectándolos explícitamente con noticias concretas de empresas, geopolítica y economía/bancos centrales (inflación, decisiones de tasas) cuando aplique — no te quedes en lo genérico, nombra la noticia y el activo.
+Párrafo 3 — Activos que pierden capital: cuáles tienen la menor Fuerza G, por qué el capital sale de ahí, y qué noticias (de cualquiera de las tres categorías) o métricas lo explican.
 Párrafo 4 — Sectores por países G7: analiza cuáles sectores dominan en qué países (usando los datos de SECTORES LIDERES POR PAIS). Identifica divergencias entre economías G7 y qué implica para la rotación de capital internacional. Menciona al menos 3 países con sus sectores líderes y valores MASA/distancia.
 Párrafo 5 — Posicionamiento estratégico: qué sugiere el modelo para el posicionamiento de capital en las próximas horas/días, dado el régimen ${regime} y las señales actuales.
 
-SÃ© especÃ­fico con los nÃºmeros del modelo. Conecta cada conclusiÃ³n con datos concretos.`;
+Sé específico con los números del modelo. Conecta cada conclusión con datos concretos.`;
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
@@ -874,18 +886,47 @@ async function fetchOptionsMetrics(sym: string): Promise<OptionsMetrics> {
 }
 
 // â”€â”€â”€ News: types + sentiment helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-interface RawNewsItem { title: string; source: string; publishedAt: number; url?: string; }
+export type NewsCategory = 'empresas' | 'geopolitica' | 'economia';
+interface RawNewsItem { title: string; source: string; publishedAt: number; url?: string; category: NewsCategory; }
 
 const CRISIS_WORDS  = ['bank run','bailout','emergency','systemic','sovereign debt','margin call','liquidity crisis','circuit breaker'];
 const BEARISH_WORDS = ['crash','collapse','panic','recession','default','tariff','war','sanctions','selloff','sell-off','plunge','tumble','slump','stagflation','bear market','bank failure','contagion','layoffs','downgrade'];
 const BULLISH_WORDS = ['rally','surge','record high','rate cut','recovery','earnings beat','profit','growth','upgrade','buyback','bull market','rebound','beat estimates'];
 
+// Whole-word match, not substring -- 'war' as a plain substring false-positives on
+// names like "Warsh" (the Fed chair), "Warsaw", "forward", etc.
+function hasWord(text: string, word: string): boolean {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(text);
+}
+
+// Yahoo's news search() doesn't reliably respect topical query intent (it tends to
+// fall back to generic trending finance headlines). Classify by keyword instead of
+// trusting whichever query happened to surface a given headline.
+const GEO_KEYWORDS = [
+  'war','conflict','sanction','tariff','trade war','geopolit','military','invasion',
+  'ceasefire','nato','ukraine','russia','taiwan','israel','gaza','middle east','iran',
+  'north korea','south china sea','coup','airstrike','missile',
+];
+const ECON_KEYWORDS = [
+  'inflation','cpi','fed','federal reserve','ecb','european central bank',
+  'bank of japan','boj','bank of england','bank of canada','interest rate','rate cut',
+  'rate hike','gdp','unemployment','jobs report','ppi','central bank','powell','lagarde',
+  'warsh','treasury yield','fomc','monetary policy',
+];
+
+function classifyNews(title: string): NewsCategory {
+  for (const w of GEO_KEYWORDS) if (hasWord(title, w)) return 'geopolitica';
+  for (const w of ECON_KEYWORDS) if (hasWord(title, w)) return 'economia';
+  return 'empresas';
+}
+
 function scoreTitle(title: string): number {
   const t = title.toLowerCase();
   let s = 0;
-  for (const w of CRISIS_WORDS)  if (t.includes(w)) s -= 2;
-  for (const w of BEARISH_WORDS) if (t.includes(w)) s -= 1;
-  for (const w of BULLISH_WORDS) if (t.includes(w)) s += 1;
+  for (const w of CRISIS_WORDS)  if (hasWord(t, w)) s -= 2;
+  for (const w of BEARISH_WORDS) if (hasWord(t, w)) s -= 1;
+  for (const w of BULLISH_WORDS) if (hasWord(t, w)) s += 1;
   return Math.max(-4, Math.min(4, s));
 }
 
@@ -893,7 +934,7 @@ function titleSentiment(score: number): 'bullish' | 'bearish' | 'neutral' {
   return score > 0 ? 'bullish' : score < 0 ? 'bearish' : 'neutral';
 }
 
-function parseRssItems(xml: string, source: string, maxItems = 8): RawNewsItem[] {
+function parseRssItems(xml: string, source: string, category: NewsCategory, maxItems = 8): RawNewsItem[] {
   const items: RawNewsItem[] = [];
   const itemRe = /<item>([\s\S]*?)<\/item>/g;
   let m: RegExpExecArray | null;
@@ -906,18 +947,19 @@ function parseRssItems(xml: string, source: string, maxItems = 8): RawNewsItem[]
     if (!title || title.length < 10) continue;
     const publishedAt = dMatch ? (new Date(dMatch[1]).getTime() || Date.now()) : Date.now();
     const url = lMatch ? (lMatch[1] ?? lMatch[2] ?? '').trim() : undefined;
-    items.push({ title, source, publishedAt, url });
+    items.push({ title, source, publishedAt, url, category });
   }
   return items;
 }
 
-async function fetchYahooNews(): Promise<RawNewsItem[]> {
+// â”€â”€â”€ Targeted Yahoo Finance news search, one query per category â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function fetchYahooNews(query: string, category: NewsCategory, count = 8): Promise<RawNewsItem[]> {
   try {
     const result = await (yf as unknown as {
       search(q: string, opts: object): Promise<{
         news?: Array<{ title?: string; publisher?: string; providerPublishTime?: Date | number; link?: string }>;
       }>;
-    }).search('market economy stocks global finance', { newsCount: 8 });
+    }).search(query, { newsCount: count });
     if (!result?.news?.length) return [];
     return result.news
       .filter(n => n.title)
@@ -928,6 +970,7 @@ async function fetchYahooNews(): Promise<RawNewsItem[]> {
           n.providerPublishTime instanceof Date ? n.providerPublishTime.getTime() :
           typeof n.providerPublishTime === 'number' ? n.providerPublishTime * 1000 : Date.now(),
         url: n.link ?? undefined,
+        category,
       }));
   } catch { return []; }
 }
@@ -945,7 +988,26 @@ async function fetchInvestingNews(): Promise<RawNewsItem[]> {
     });
     clearTimeout(tid);
     if (!res.ok) return [];
-    return parseRssItems(await res.text(), 'Investing.com');
+    return parseRssItems(await res.text(), 'Investing.com', 'empresas');
+  } catch { return []; }
+}
+
+// Yahoo's news search() does not respect topical query intent -- it returns the
+// same generic trending list regardless of the query text (verified empirically).
+// Google News RSS search does real full-text matching, so it's the source for the
+// geopolitics and economy/central-banks categories.
+async function fetchGoogleNews(query: string, category: NewsCategory, maxItems = 8): Promise<RawNewsItem[]> {
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 5000);
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+    if (!res.ok) return [];
+    return parseRssItems(await res.text(), 'Google News', category, maxItems);
   } catch { return []; }
 }
 
@@ -961,12 +1023,19 @@ export async function GET() {
     const assetAuxSyms       = ['BZ=F', 'ZB=F', '^N225', 'GLD', 'IBIT', 'USO', 'UUP', 'SPY'];
     const allSymbols         = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms, ...countrySectorSyms, ...assetAuxSyms])];
 
-    const [rawQuotes, yahooNews, investingNews, rawOptions] = await Promise.all([
+    const [rawQuotes, companyNews, geoNews, econNews, generalNews, investingNews, rawOptions] = await Promise.all([
       Promise.all(allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null))),
-      fetchYahooNews(),
+      fetchYahooNews('stock market company earnings corporate results', 'empresas', 10),
+      fetchGoogleNews('geopolitics OR sanctions OR tariffs OR war OR "trade war" when:2d', 'geopolitica', 8),
+      fetchGoogleNews('inflation OR "Federal Reserve" OR "interest rates" OR "central bank" OR ECB OR "Bank of Japan" OR "Bank of England" when:2d', 'economia', 8),
+      fetchYahooNews('market economy stocks global finance', 'empresas', 10),
       fetchInvestingNews(),
       Promise.all(OPTIONS_SYMS.map(sym => fetchOptionsMetrics(sym))),
     ]);
+    // Re-classify by keyword regardless of which query surfaced the headline --
+    // Yahoo's search relevance is unreliable for topical (non-ticker) queries.
+    const yahooNews = [...companyNews, ...geoNews, ...econNews, ...generalNews]
+      .map(item => ({ ...item, category: classifyNews(item.title) }));
     const optionsMap: Record<string, OptionsMetrics> = {};
     OPTIONS_SYMS.forEach((sym, i) => { optionsMap[sym] = rawOptions[i]; });
     const quotes = rawQuotes;
@@ -988,9 +1057,17 @@ export async function GET() {
       : 10;
 
     // â”€â”€ News sentiment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const allNewsRaw = [...yahooNews, ...investingNews]
-      .sort((a, b) => b.publishedAt - a.publishedAt)
-      .slice(0, 12);
+    // Per-category cap (not a single global recency slice) so geopolitics/economy news
+    // can't get crowded out by a faster-moving stream of company headlines.
+    const classifiedInvestingNews = investingNews.map(item => ({ ...item, category: classifyNews(item.title) }));
+    const byCategory = (cat: NewsCategory) => [...yahooNews, ...classifiedInvestingNews]
+      .filter(n => n.category === cat)
+      .sort((a, b) => b.publishedAt - a.publishedAt);
+    const allNewsRaw = [
+      ...byCategory('empresas').slice(0, 6),
+      ...byCategory('geopolitica').slice(0, 4),
+      ...byCategory('economia').slice(0, 4),
+    ].sort((a, b) => b.publishedAt - a.publishedAt);
     const scoredNews = allNewsRaw.map(item => ({ ...item, score: scoreTitle(item.title) }));
     const newsAvgScore = scoredNews.length > 0
       ? scoredNews.reduce((a, b) => a + b.score, 0) / scoredNews.length
@@ -1176,8 +1253,8 @@ export async function GET() {
     }
 
     // â”€â”€ Assemble scenario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const newsHeadlines = scoredNews.slice(0, 12).map(({ title, source, publishedAt, score, url }) => ({
-      title, source, publishedAt, url,
+    const newsHeadlines = scoredNews.slice(0, 14).map(({ title, source, publishedAt, score, url, category }) => ({
+      title, source, publishedAt, url, category,
       sentiment: titleSentiment(score),
     }));
     const newsSentiment = titleSentiment(newsAvgScore > 0.5 ? 1 : newsAvgScore < -0.5 ? -1 : 0);

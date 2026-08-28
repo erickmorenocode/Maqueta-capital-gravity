@@ -75,6 +75,7 @@ export interface NewsItem {
   source: string;
   publishedAt: number;
   sentiment: 'bullish' | 'bearish' | 'neutral';
+  category: 'empresas' | 'geopolitica' | 'economia';
   url?: string;
 }
 
@@ -400,6 +401,7 @@ export interface CompanyGravityResult {
   ticker: string;
   name: string;
   price: number;
+  open: number;
   changePct: number;
   masa: number;
   distancia: number;

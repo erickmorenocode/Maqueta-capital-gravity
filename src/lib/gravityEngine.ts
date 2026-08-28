@@ -1,9 +1,11 @@
 import YahooFinance from 'yahoo-finance2';
 import type { CompanyGravityResult } from '@/src/data';
+import { GEO_EVENTS } from '@/src/data';
 
 // ─── Yahoo Finance quote interface ────────────────────────────────────────────
 export interface YFQuote {
   regularMarketPrice?: number;
+  regularMarketOpen?: number;
   regularMarketChangePercent?: number;
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
@@ -20,6 +22,13 @@ export interface YFQuote {
 }
 
 export const yf = new YahooFinance();
+
+// ─── Compact geopolitical-events snapshot (editorial data, not a live feed) ───
+export function getGeoEventsSnapshot() {
+  return GEO_EVENTS.map(e => ({
+    id: e.id, name: e.name, type: e.type, severity: e.severity, countries: e.countries,
+  }));
+}
 
 // ─── Country-specific transaction costs ───────────────────────────────────────
 export const COUNTRY_TX_COSTS: Record<string, number> = {
@@ -136,6 +145,7 @@ export function computeCompanyG(
   country: string,
 ): Omit<CompanyGravityResult, 'ticker' | 'name' | 'isGravityCenter' | 'tier' | 'error'> {
   const price    = quote.regularMarketPrice         ?? 100;
+  const open     = quote.regularMarketOpen          ?? price;
   const low52    = quote.fiftyTwoWeekLow            ?? price * 0.80;
   const high52   = quote.fiftyTwoWeekHigh           ?? price * 1.20;
   const avg50    = quote.fiftyDayAverage            ?? price;
@@ -215,6 +225,7 @@ export function computeCompanyG(
 
   return {
     price,
+    open,
     changePct,
     masa: masaAdj,
     distancia,
@@ -243,6 +254,7 @@ export function computeAssetG(
   weights: { w1: number; w2: number; w3: number; w4: number },
 ): Omit<CompanyGravityResult, 'ticker' | 'name' | 'isGravityCenter' | 'tier' | 'error'> {
   const price    = quote.regularMarketPrice         ?? 100;
+  const open     = quote.regularMarketOpen          ?? price;
   const low52    = quote.fiftyTwoWeekLow            ?? price * 0.80;
   const high52   = quote.fiftyTwoWeekHigh           ?? price * 1.20;
   const avg50    = quote.fiftyDayAverage            ?? price;
@@ -309,6 +321,7 @@ export function computeAssetG(
 
   return {
     price,
+    open,
     changePct,
     masa: masaAdj,
     distancia,

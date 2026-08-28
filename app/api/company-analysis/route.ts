@@ -4,7 +4,7 @@ import type { CompanyGravityResult } from '@/src/data';
 import { supabaseAdmin } from '@/src/lib/supabase';
 import {
   yf, SECTOR_ETFS, YFQuote, fetchOptionsMetrics, computeCompanyG,
-  fetchMacroContext, assignTiers,
+  fetchMacroContext, assignTiers, getGeoEventsSnapshot,
 } from '@/src/lib/gravityEngine';
 
 export const dynamic = 'force-dynamic';
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     const quote = companyQuotes[i];
     if (!quote || !quote.regularMarketPrice) {
       return {
-        ticker: co.ticker, name: co.name, price: 0, changePct: 0,
+        ticker: co.ticker, name: co.name, price: 0, open: 0, changePct: 0,
         masa: 0, distancia: 0, friccion: 0, fuerzaG: -99,
         institutionalPressure: 0, optionsPressure: 0, gammaFlip: null, putCallRatio: 1,
         isGravityCenter: false, tier: 'low' as const,
@@ -101,11 +101,12 @@ export async function GET(req: NextRequest) {
 
   // Fire-and-forget: persist snapshot for historical trend queries. Never blocks the response.
   if (supabaseAdmin) {
+    const geoEvents = getGeoEventsSnapshot();
     const rows = results.filter(r => !r.error).map(r => ({
       country, sector,
-      ticker: r.ticker, name: r.name, price: r.price,
+      ticker: r.ticker, name: r.name, open: r.open, price: r.price,
       masa: r.masa, distancia: r.distancia, friccion: r.friccion, fuerza_g: r.fuerzaG,
-      tier: r.tier,
+      tier: r.tier, geo_events: geoEvents,
     }));
     if (rows.length > 0) {
       supabaseAdmin.from('g_history').insert(rows).then(({ error }) => {

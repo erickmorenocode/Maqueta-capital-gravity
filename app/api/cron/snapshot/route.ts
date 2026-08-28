@@ -4,7 +4,7 @@ import type { CompanyGravityResult } from '@/src/data';
 import { supabaseAdmin } from '@/src/lib/supabase';
 import {
   yf, SECTOR_ETFS, YFQuote, fetchOptionsMetrics, computeCompanyG, computeAssetG,
-  fetchMacroContext, assignTiers,
+  fetchMacroContext, assignTiers, getGeoEventsSnapshot,
 } from '@/src/lib/gravityEngine';
 
 export const dynamic = 'force-dynamic';
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     if (!quote || !quote.regularMarketPrice) {
       failed++;
       return {
-        ticker: job.ticker, name: job.name, price: 0, changePct: 0,
+        ticker: job.ticker, name: job.name, price: 0, open: 0, changePct: 0,
         masa: 0, distancia: 0, friccion: 0, fuerzaG: -99,
         institutionalPressure: 0, optionsPressure: 0, gammaFlip: null, putCallRatio: 1,
         isGravityCenter: false, tier: 'low' as const,
@@ -106,11 +106,12 @@ export async function GET(req: NextRequest) {
   }
   for (const group of Object.values(groups)) assignTiers(group);
 
+  const geoEvents = getGeoEventsSnapshot();
   const rows = flat.filter(r => !r.error).map(r => ({
     country: r.country, sector: r.sector,
-    ticker: r.ticker, name: r.name, price: r.price,
+    ticker: r.ticker, name: r.name, open: r.open, price: r.price,
     masa: r.masa, distancia: r.distancia, friccion: r.friccion, fuerza_g: r.fuerzaG,
-    tier: r.tier,
+    tier: r.tier, geo_events: geoEvents,
   }));
 
   // ── Phase 2: cross-asset macro instruments (USD, bonds, crypto, gold, oil, regional indices) ──
@@ -130,7 +131,7 @@ export async function GET(req: NextRequest) {
     if (!quote || !quote.regularMarketPrice) {
       assetFailed++;
       return {
-        ticker: job.ticker, name: job.name, price: 0, changePct: 0,
+        ticker: job.ticker, name: job.name, price: 0, open: 0, changePct: 0,
         masa: 0, distancia: 0, friccion: 0, fuerzaG: -99,
         institutionalPressure: 0, optionsPressure: 0, gammaFlip: null, putCallRatio: 1,
         isGravityCenter: false, tier: 'low' as const,
@@ -153,9 +154,9 @@ export async function GET(req: NextRequest) {
 
   const assetRows = flatAssets.filter(r => !r.error).map(r => ({
     country: r.region, sector: r.assetClass, asset_class: r.assetClass,
-    ticker: r.ticker, name: r.name, price: r.price,
+    ticker: r.ticker, name: r.name, open: r.open, price: r.price,
     masa: r.masa, distancia: r.distancia, friccion: r.friccion, fuerza_g: r.fuerzaG,
-    tier: r.tier,
+    tier: r.tier, geo_events: geoEvents,
   }));
 
   const insertErrors: string[] = [];
