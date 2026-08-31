@@ -1,8 +1,9 @@
 ﻿import { NextResponse } from 'next/server';
-import YahooFinance from 'yahoo-finance2';
 import { GoogleGenAI } from '@google/genai';
 import type { MarketScenario, GravityMetrics, CapitalFlow } from '@/src/data';
 import { supabaseAdmin } from '@/src/lib/supabase';
+import { yf, clamp, fetchOptionsMetrics } from '@/src/lib/gravityEngine';
+import type { OptionsResult } from '@/src/lib/gravityEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +28,6 @@ interface YFQuote {
   bid?: number;
   ask?: number;
 }
-
-const yf = new YahooFinance();
 
 // â”€â”€â”€ Asset symbols â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ASSET_SYMBOLS: Record<string, string> = {
@@ -286,10 +285,6 @@ const REGIME_WEIGHTS: Record<string, { w1: number; w2: number; w3: number; w4: n
   'neutral':  { w1: 0.25, w2: 0.25, w3: 0.25, w4: 0.25 },
 };
 
-function clamp(val: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, val));
-}
-
 // â”€â”€â”€ Macro context passed to sector functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface MacroContext {
   vix: number;
@@ -307,16 +302,18 @@ interface RawAssetMetrics extends GravityMetrics { distanciaRaw: number; changeP
 function computeAssetMetrics(
   assetId: string,
   quote: YFQuote,
-  vix: number,
-  regime: string,
+  macro: MacroContext,
   weights: { w1: number; w2: number; w3: number; w4: number },
 ): RawAssetMetrics {
+  const { vix, us10y, us2y, hygStress, regime, regimeMult } = macro;
   const base      = ASSET_BASE[assetId];
   const price     = quote.regularMarketPrice ?? 100;
   const low52     = quote.fiftyTwoWeekLow    ?? price * 0.80;
   const high52    = quote.fiftyTwoWeekHigh   ?? price * 1.20;
   const avg50     = quote.fiftyDayAverage    ?? price;
   const changePct = quote.regularMarketChangePercent ?? 0;
+  const vol       = quote.regularMarketVolume        ?? 0;
+  const avgVol    = (quote.averageDailyVolume3Month ?? vol) || 1;
 
   const rangeW         = high52 - low52;
   const retorno        = Math.round(rangeW > 0 ? clamp(((price - low52) / rangeW) * 100, 0, 100) : 50);
@@ -324,8 +321,8 @@ function computeAssetMetrics(
   const dailyReturn    = Math.round(clamp(50 + changePct * 5, 0, 100));
   const momentum50d    = Math.round(clamp(50 + momentum, 0, 100));
   const crecimiento    = Math.round(clamp(momentum50d * 0.5 + dailyReturn * 0.5, 0, 100));
-  const liqPenalty     = regime === 'crisis' ? 10 : regime === 'risk-off' ? 5 : 0;
-  const liquidezActivo = Math.round(clamp(base.liquidez - liqPenalty, 0, 100));
+  // Real traded volume vs its own 3-month average -- not a static per-asset-class constant.
+  const liquidezActivo = Math.round(clamp(vol / avgVol * 50, 0, 100));
   const trendSign      = price >= avg50 ? 1 : -1;
   const vixPenalty     = clamp((vix - 15) * 2, 0, 50);
   const confianza      = Math.round(clamp(60 + trendSign * 10 + changePct * 2 - vixPenalty, 0, 100));
@@ -334,13 +331,23 @@ function computeAssetMetrics(
   const midPrice    = (high52 + low52) / 2;
   const annualRange = midPrice > 0 ? ((high52 - low52) / midPrice) * 100 : 20;
   const volatilidad = Math.round(clamp(annualRange * (vix / 20) * 0.5, 0, 100));
-  const spreadMult  = regime === 'crisis' ? 2.5 : regime === 'risk-off' ? 1.5 : regime === 'risk-on' ? 0.7 : 1.0;
-  const spread      = Math.round(clamp(base.spreadBase * spreadMult, 0, 100));
+  // Spread: real HY-credit-stress + yield-curve signal, blended with the asset class's
+  // structural baseline (EM/Crypto inherently wider than USD/Bonds) instead of a pure
+  // regime-bucket multiplier on a static constant.
+  const curveContrib = clamp((us10y - us2y) * 5, 0, 20);
+  const realSpread    = hygStress * regimeMult * 0.4 + curveContrib;
+  const spread      = Math.round(clamp(base.spreadBase * 0.5 + realSpread, 0, 100));
   const correlacion = base.correlacion;
   const distanciaRaw = volatilidad + spread + (1 - correlacion) * 100;
 
+  // Friccion: real bid/ask spread when the quote has it, real volume-vs-average as a
+  // liquidity bonus/penalty; the asset class's structural friccion is now only a floor.
   const fricMult = regime === 'crisis' ? 1.5 : regime === 'risk-off' ? 1.2 : 1.0;
-  const friccion = Math.round(clamp(base.friccion * fricMult, 1, 30));
+  const bidAsk = quote.bid && quote.ask && quote.bid > 0 && price > 0
+    ? (quote.ask - quote.bid) / price * 100 * 20
+    : base.friccion * 0.4;
+  const liqBonus = clamp((vol / Math.max(avgVol, 1) - 1) * 10, -10, 10);
+  const friccion = Math.round(clamp((bidAsk + base.friccion * 0.6 - liqBonus) * fricMult, 1, 30));
 
   return {
     masa,
@@ -350,15 +357,15 @@ function computeAssetMetrics(
     masaWeights:         weights,
     distanciaComponents: { volatilidad, spread, correlacion },
     friccionComponents:  {
-      bidAskSpread:  Math.round(clamp(base.friccion * 0.40 * fricMult, 1, 30)),
+      bidAskSpread:  Math.round(clamp(bidAsk, 1, 30)),
       restricciones: Math.round(clamp(base.friccion * 0.35 * fricMult, 1, 30)),
-      profundidad:   Math.round(clamp(base.liquidez * 0.90, 0, 100)),
+      profundidad:   liquidezActivo,
     },
     fuerzaG:                0,
     zscoreFlows:            parseFloat((changePct / 2).toFixed(2)),
     masaJustificacion:      `Ret=${retorno}(52s) Daily=${dailyReturn}(${changePct.toFixed(1)}%) Crec=${crecimiento} Liq=${liquidezActivo} Conf=${confianza}`,
-    distanciaJustificacion: `Vol52s=${annualRange.toFixed(1)}%Ã—VIX=${vix.toFixed(1)} â†’ vol=${volatilidad}, spr=${spread}`,
-    friccionJustificacion:  `F_base=${base.friccion}Ã—${fricMult}=${friccion}`,
+    distanciaJustificacion: `Vol52s=${annualRange.toFixed(1)}%_TIMES_VIX=${vix.toFixed(1)} vol=${volatilidad}, spr=${spread}`,
+    friccionJustificacion:  `bidAsk=${bidAsk.toFixed(1)}+base=${(base.friccion*0.6).toFixed(1)}_TIMES_${fricMult}=${friccion}`,
     distanciaRaw,
     changePercent: changePct,
   };
@@ -843,87 +850,12 @@ function computeSectorRotationSignal(
 }
 
 // â”€â”€â”€ Options: Black-Scholes gamma â†’ real GEX + PCR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-interface OptionsMetrics {
-  netGex:          number;
-  putCallRatio:    number;
-  gammaFlip:       number | null;
-  optionsPressure: number; // [-100, 100]
-}
-const OPTIONS_ZERO: OptionsMetrics = { netGex: 0, putCallRatio: 1, gammaFlip: null, optionsPressure: 0 };
+// fetchOptionsMetrics (Black-Scholes gamma -> GEX/PCR) is imported from
+// gravityEngine.ts -- this was previously a byte-identical duplicate.
 const OPTIONS_SYMS = [
   ...Object.values(SECTOR_SYMBOLS),
   'QQQ', 'GLD', 'TLT', 'EEM', 'EZU', 'EWJ', 'EWY', 'IBIT', 'USO', 'UUP',
 ];
-
-function bsGamma(S: number, K: number, T: number, r: number, sigma: number): number {
-  if (T <= 0 || sigma <= 0 || S <= 0 || K <= 0) return 0;
-  const d1 = (Math.log(S / K) + (r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
-  return Math.exp(-0.5 * d1 * d1) / (Math.sqrt(2 * Math.PI) * S * sigma * Math.sqrt(T));
-}
-
-async function fetchOptionsMetrics(sym: string): Promise<OptionsMetrics> {
-  try {
-    const result = await (yf as unknown as {
-      options(s: string): Promise<{
-        quote: { regularMarketPrice?: number };
-        options: Array<{
-          expirationDate: Date;
-          calls: Array<{ strike?: number; openInterest?: number; volume?: number; impliedVolatility?: number }>;
-          puts:  Array<{ strike?: number; openInterest?: number; volume?: number; impliedVolatility?: number }>;
-        }>;
-      }>;
-    }).options(sym);
-
-    if (!result?.options?.length) return OPTIONS_ZERO;
-    const spot = result.quote?.regularMarketPrice ?? 0;
-    if (spot <= 0) return OPTIONS_ZERO;
-
-    const R   = 0.05; // fixed risk-free rate proxy
-    const now = Date.now();
-    let callGex = 0, putGex = 0, callVol = 0, putVol = 0;
-    const strikeGex: Record<number, number> = {};
-
-    for (const chain of result.options.slice(0, 2)) {
-      const T = (chain.expirationDate.getTime() - now) / (365.25 * 24 * 3600 * 1000);
-      if (T <= 0) continue;
-
-      for (const c of chain.calls) {
-        const K = c.strike ?? 0; const oi = c.openInterest ?? 0;
-        const iv = c.impliedVolatility ?? 0.3;
-        if (K <= 0 || oi <= 0) continue;
-        const g = bsGamma(spot, K, T, R, iv) * oi * 100 * spot * spot / 100;
-        callGex += g; callVol += (c.volume ?? 0);
-        strikeGex[K] = (strikeGex[K] ?? 0) + g;
-      }
-      for (const p of chain.puts) {
-        const K = p.strike ?? 0; const oi = p.openInterest ?? 0;
-        const iv = p.impliedVolatility ?? 0.3;
-        if (K <= 0 || oi <= 0) continue;
-        const g = bsGamma(spot, K, T, R, iv) * oi * 100 * spot * spot / 100;
-        putGex += g; putVol += (p.volume ?? 0);
-        strikeGex[K] = (strikeGex[K] ?? 0) - g;
-      }
-    }
-
-    // Gamma flip: strike where cumulative net GEX changes sign
-    let cum = 0, gammaFlip: number | null = null;
-    for (const s of Object.keys(strikeGex).map(Number).sort((a, b) => a - b)) {
-      const prev = cum; cum += strikeGex[s];
-      if (prev !== 0 && Math.sign(prev) !== Math.sign(cum)) { gammaFlip = s; break; }
-    }
-
-    const total    = callGex + putGex;
-    const gexScore = total > 0 ? clamp(((callGex / total) - 0.5) * 200, -100, 100) : 0;
-    const pcrScore = clamp((1.0 - (callVol > 0 ? putVol / callVol : 1.0)) * 50, -100, 100);
-
-    return {
-      netGex:          callGex - putGex,
-      putCallRatio:    callVol > 0 ? putVol / callVol : 1.0,
-      gammaFlip,
-      optionsPressure: clamp(gexScore * 0.6 + pcrScore * 0.4, -100, 100),
-    };
-  } catch { return OPTIONS_ZERO; }
-}
 
 // â”€â”€â”€ News: types + sentiment helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type NewsCategory = 'empresas' | 'geopolitica' | 'economia';
@@ -1334,7 +1266,7 @@ export async function GET() {
     // Yahoo's search relevance is unreliable for topical (non-ticker) queries.
     const yahooNews = [...companyNews, ...geoNews, ...econNews, ...generalNews]
       .map(item => ({ ...item, category: classifyNews(item.title) }));
-    const optionsMap: Record<string, OptionsMetrics> = {};
+    const optionsMap: Record<string, OptionsResult> = {};
     OPTIONS_SYMS.forEach((sym, i) => { optionsMap[sym] = rawOptions[i]; });
     const quotes = rawQuotes;
     const quoteMap: Record<string, YFQuote> = {};
@@ -1441,7 +1373,7 @@ export async function GET() {
     // â”€â”€ Asset metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const rawAssets: Record<string, RawAssetMetrics> = {};
     for (const [id, sym] of Object.entries(ASSET_SYMBOLS)) {
-      rawAssets[id] = computeAssetMetrics(id, quoteMap[sym] ?? {}, vix, regime, weights);
+      rawAssets[id] = computeAssetMetrics(id, quoteMap[sym] ?? {}, macro, weights);
     }
     const assetDistRaw = Object.values(rawAssets).map(m => m.distanciaRaw);
     const minAD  = Math.min(...assetDistRaw);
