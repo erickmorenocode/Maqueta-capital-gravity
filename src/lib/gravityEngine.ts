@@ -31,6 +31,9 @@ export function getGeoEventsSnapshot() {
 }
 
 // ─── Country-specific transaction costs ───────────────────────────────────────
+// UNCALIBRATED: reasonable brokerage/exchange-fee estimates per market, not sourced
+// from a specific broker/exchange fee schedule, and never validated against G's
+// actual predictive power. Treat as a design assumption, not a verified fact.
 export const COUNTRY_TX_COSTS: Record<string, number> = {
   'EE.UU.': 0.05, 'Canadá': 0.10, 'Francia': 0.12, 'Alemania': 0.12,
   'Italia': 0.15, 'Japón': 0.18, 'Reino Unido': 0.13,
@@ -44,6 +47,11 @@ export const SECTOR_ETFS: Record<string, string> = {
 };
 
 // ─── Regime weights (mirrors live-analysis) ───────────────────────────────────
+// UNCALIBRATED: how much Return/Growth/Liquidity/Confidence should count toward MASA
+// per macro regime is a design heuristic (more weight on Return/Growth when risk-on,
+// more on Liquidity/Confidence when risk-off/crisis makes intuitive sense) -- it has
+// never been fit or backtested against realized returns. See the audit recommendation
+// on backtesting (2026-08-31) before treating these numbers as validated.
 export const REGIME_WEIGHTS: Record<string, { w1: number; w2: number; w3: number; w4: number }> = {
   'risk-on':  { w1: 0.40, w2: 0.35, w3: 0.15, w4: 0.10 },
   'risk-off': { w1: 0.15, w2: 0.10, w3: 0.35, w4: 0.40 },
@@ -375,6 +383,10 @@ export async function fetchMacroContext(): Promise<MacroContext> {
 }
 
 // ─── Assign gravity-center tiers within a group via mean ± 0.5σ ───────────────
+// UNCALIBRATED: the 0.5σ multiplier (vs. 0.3σ, 1σ, or a percentile-based cut) was
+// picked by feel, not fit against how well "gravity center" status predicted forward
+// returns. Groups also tend to be small (~10 companies per country/sector), so the
+// sample sigma itself is noisy -- one outlier can swing the whole group's threshold.
 export function assignTiers(results: CompanyGravityResult[]): void {
   const validForces = results.filter(r => !r.error).map(r => r.fuerzaG);
   if (validForces.length === 0) return;
