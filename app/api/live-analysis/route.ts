@@ -600,7 +600,11 @@ function computeFlows(metrics: Record<string, GravityMetrics>): CapitalFlow[] {
       const mF = metrics[from];
       const mT = metrics[to];
       const flowTheoretical = (mF.masa * mT.masa) / Math.pow(Math.max(1, mT.distancia), 2) / Math.max(1, mT.friccion);
-      if (flowTheoretical < 5) continue;
+      // Only drop non-positive/meaningless pairs -- the top-10 slice below already
+      // does the real selection, so an absolute cutoff here just breaks silently
+      // whenever the masa/friccion scale shifts (as it did once friccion/liquidity
+      // started coming from real bid-ask/volume instead of a fixed constant).
+      if (flowTheoretical <= 0) continue;
       const zscore    = clamp(mF.zscoreFlows ?? 0, -0.8, 2.0);
       const flowFinal = flowTheoretical * (1 + zscore);
       rawFlows.push({ from, to, flowTheoretical, flowFinal, zscoreAdjustment: parseFloat((mF.zscoreFlows ?? 0).toFixed(2)) });
