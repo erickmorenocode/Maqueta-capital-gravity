@@ -5,8 +5,11 @@ name: Hourly Telegram Alert
 # So the hourly trigger lives here instead -- GitHub Actions just calls the
 # Vercel API route over HTTPS, same as Vercel's own cron would.
 on:
+  # :05 instead of :00 -- top of the hour is peak congestion for GitHub's
+  # scheduler (every cron job on the platform fires there), which was
+  # causing this to silently skip its first two runs.
   schedule:
-    - cron: '0 * * * *'
+    - cron: '5 * * * *'
   workflow_dispatch: {}
 
 jobs:
