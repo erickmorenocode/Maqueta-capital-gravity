@@ -924,12 +924,19 @@ const GEO_KEYWORDS = [
   'war','conflict','sanction','tariff','trade war','geopolit','military','invasion',
   'ceasefire','nato','ukraine','russia','taiwan','israel','gaza','middle east','iran',
   'north korea','south china sea','coup','airstrike','missile',
+  // Spanish (real es-419 Google News fetch added 2026-08-31)
+  'guerra','conflicto','sancion','sanciones','arancel','aranceles','otan','ucrania',
+  'rusia','oriente medio','oriente proximo','corea del norte','golpe de estado',
+  'estrecho de ormuz',
 ];
 const ECON_KEYWORDS = [
   'inflation','cpi','fed','federal reserve','ecb','european central bank',
   'bank of japan','boj','bank of england','bank of canada','interest rate','rate cut',
   'rate hike','gdp','unemployment','jobs report','ppi','central bank','powell','lagarde',
-  'warsh','treasury yield','fomc','monetary policy',
+  'warsh','treasury yield','fomc','monetary policy','treasury','bond','yields',
+  // Spanish
+  'inflacion','reserva federal','banco central','tasas de interes','recorte de tasas',
+  'subida de tasas','desempleo','tesoro','bonos','rendimientos',
 ];
 
 function classifyNews(title: string): NewsCategory {
@@ -964,7 +971,16 @@ function ruleMatches(rule: NewsFlowRule, title: string): boolean {
 const NEWS_FLOW_RULES: NewsFlowRule[] = [
   // ── Geopolitics ──────────────────────────────────────────────────────────
   {
-    keywords: ['war', 'conflict', 'invasion', 'military', 'airstrike', 'missile', 'coup'],
+    // Bare 'russia'/'ukraine'/'rusia'/'ucrania' included per explicit user request
+    // (2026-08-31) for instant triggering, even though this is looser than the other
+    // words here -- a Russia/Ukraine headline unrelated to the war would false-positive.
+    // Accepted trade-off: real-world 2026 headlines mentioning them are overwhelmingly
+    // war-related, and this is a fast alert, not the record of truth.
+    keywords: [
+      'war', 'conflict', 'invasion', 'military', 'airstrike', 'missile', 'coup',
+      'nato', 'russia', 'ukraine',
+      'guerra', 'conflicto', 'otan', 'rusia', 'ucrania',
+    ],
     targets: [
       { kind: 'asset', id: 'Gold', tilt: 12 },
       { kind: 'asset', id: 'Bonds', tilt: 8 },
@@ -996,7 +1012,39 @@ const NEWS_FLOW_RULES: NewsFlowRule[] = [
     label: 'shock de oferta de petroleo en Medio Oriente (riesgo inflacionario -> USD sube, oro y bonos bajan)',
   },
   {
-    keywords: ['strait of hormuz'],
+    // 'iran' (no accent) won't match the correctly-accented Spanish spelling "Irán" --
+    // hasWord() is exact-substring, á != a. Separate rule for that spelling.
+    requireAll: ['petroleo', 'irán'],
+    targets: [
+      { kind: 'asset', id: 'Oil', tilt: 15 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+      { kind: 'asset', id: 'Gold', tilt: -5 },
+      { kind: 'asset', id: 'Bonds', tilt: -5 },
+    ],
+    label: 'shock de oferta de petroleo en Iran (riesgo inflacionario -> USD sube, oro y bonos bajan)',
+  },
+  {
+    requireAll: ['petroleo', 'iran'],
+    targets: [
+      { kind: 'asset', id: 'Oil', tilt: 15 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+      { kind: 'asset', id: 'Gold', tilt: -5 },
+      { kind: 'asset', id: 'Bonds', tilt: -5 },
+    ],
+    label: 'shock de oferta de petroleo en Iran (riesgo inflacionario -> USD sube, oro y bonos bajan)',
+  },
+  {
+    requireAll: ['petroleo', 'oriente medio'],
+    targets: [
+      { kind: 'asset', id: 'Oil', tilt: 15 },
+      { kind: 'asset', id: 'USD', tilt: 8 },
+      { kind: 'asset', id: 'Gold', tilt: -5 },
+      { kind: 'asset', id: 'Bonds', tilt: -5 },
+    ],
+    label: 'shock de oferta de petroleo en Medio Oriente (riesgo inflacionario -> USD sube, oro y bonos bajan)',
+  },
+  {
+    keywords: ['strait of hormuz', 'estrecho de ormuz'],
     targets: [
       { kind: 'asset', id: 'Oil', tilt: 15 },
       { kind: 'asset', id: 'USD', tilt: 8 },
@@ -1277,11 +1325,11 @@ async function fetchInvestingNews(): Promise<RawNewsItem[]> {
 // same generic trending list regardless of the query text (verified empirically).
 // Google News RSS search does real full-text matching, so it's the source for the
 // geopolitics and economy/central-banks categories.
-async function fetchGoogleNews(query: string, category: NewsCategory, maxItems = 8): Promise<RawNewsItem[]> {
+async function fetchGoogleNews(query: string, category: NewsCategory, maxItems = 8, hl = 'en-US'): Promise<RawNewsItem[]> {
   try {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 5000);
-    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=${hl}&gl=US&ceid=US:${hl}`;
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
       signal: controller.signal,
@@ -1303,18 +1351,22 @@ export async function computeLiveSnapshot() {
     const assetAuxSyms       = ['BZ=F', 'ZB=F', '^N225', 'GLD', 'IBIT', 'USO', 'UUP', 'SPY'];
     const allSymbols         = [...new Set([...assetSyms, ...sectorSyms, ...countrySyms, ...macroSyms, ...countrySectorSyms, ...assetAuxSyms])];
 
-    const [rawQuotes, companyNews, geoNews, econNews, generalNews, investingNews, rawOptions] = await Promise.all([
+    const [rawQuotes, companyNews, geoNews, econNews, geoNewsEs, econNewsEs, generalNews, investingNews, rawOptions] = await Promise.all([
       Promise.all(allSymbols.map(sym => (yf.quote(sym) as Promise<YFQuote>).catch(() => null))),
       fetchYahooNews('stock market company earnings corporate results', 'empresas', 10),
       fetchGoogleNews('geopolitics OR sanctions OR tariffs OR war OR "trade war" when:2d', 'geopolitica', 8),
       fetchGoogleNews('inflation OR "Federal Reserve" OR "interest rates" OR "central bank" OR ECB OR "Bank of Japan" OR "Bank of England" when:2d', 'economia', 8),
+      // Real Spanish-language coverage (not just keyword lists) -- Google News hl/gl/ceid
+      // controls which national edition is queried, verified 2026-08-31.
+      fetchGoogleNews('Rusia OR Ucrania OR guerra OR OTAN OR "estrecho de Ormuz" OR sanciones OR aranceles when:2d', 'geopolitica', 6, 'es-419'),
+      fetchGoogleNews('inflacion OR "Reserva Federal" OR "banco central" OR tasas OR bonos OR rendimientos when:2d', 'economia', 6, 'es-419'),
       fetchYahooNews('market economy stocks global finance', 'empresas', 10),
       fetchInvestingNews(),
       Promise.all(OPTIONS_SYMS.map(sym => fetchOptionsMetrics(sym))),
     ]);
     // Re-classify by keyword regardless of which query surfaced the headline --
     // Yahoo's search relevance is unreliable for topical (non-ticker) queries.
-    const yahooNews = [...companyNews, ...geoNews, ...econNews, ...generalNews]
+    const yahooNews = [...companyNews, ...geoNews, ...econNews, ...geoNewsEs, ...econNewsEs, ...generalNews]
       .map(item => ({ ...item, category: classifyNews(item.title) }));
     const optionsMap: Record<string, OptionsResult> = {};
     OPTIONS_SYMS.forEach((sym, i) => { optionsMap[sym] = rawOptions[i]; });

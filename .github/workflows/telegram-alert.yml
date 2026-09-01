@@ -1,0 +1,19 @@
+name: Hourly Telegram Alert
+
+# Vercel Hobby plan only allows crons that fire once a day (hourly schedules
+# fail the whole deployment: "Hobby accounts are limited to daily cron jobs").
+# So the hourly trigger lives here instead -- GitHub Actions just calls the
+# Vercel API route over HTTPS, same as Vercel's own cron would.
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call telegram-alert endpoint
+        run: |
+          curl -sf -X GET "https://capital-gravity.vercel.app/api/cron/telegram-alert" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
