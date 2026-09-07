@@ -20,6 +20,7 @@ import {
   eventStudy,
   simulateIcdRotationStrategy,
   buyAndHoldCurve,
+  sectorBuyAndHoldReturns,
   type WindowKey,
   type PriceBar,
   type TickerStaticInfo,
@@ -152,6 +153,7 @@ export default function DensityLab() {
   const rotationMatrix = useMemo(() => buildRotationMatrix(sectorMetricsWindow, heatmapDays), [sectorMetricsWindow, heatmapDays]);
   const ranking = useMemo(() => latestRanking(sectorMetricsWindow), [sectorMetricsWindow]);
   const corrMatrix = useMemo(() => lagCorrelationMatrix(sectorMetricsWindow), [sectorMetricsWindow]);
+  const sectorReturns = useMemo(() => sectorBuyAndHoldReturns(sectorMetricsWindow), [sectorMetricsWindow]);
   const events = useMemo(() => eventStudy(sectorMetricsWindow, zThreshold), [sectorMetricsWindow, zThreshold]);
   const strategyCurve = useMemo(
     () => simulateIcdRotationStrategy(sectorMetricsWindow, lookbackDays, holdDays),
@@ -347,6 +349,7 @@ export default function DensityLab() {
                       colLabels={rotationMatrix.dates}
                       values={rotationMatrix.values}
                       scaleType="sequential"
+                      legendLabel="ICD (densidad de capital)"
                     />
                   </div>
                 )}
@@ -396,10 +399,52 @@ export default function DensityLab() {
                         colLabels={corrMatrix.lags.map((l) => `${l}d`)}
                         values={corrMatrix.values}
                         scaleType="diverging"
+                        legendLabel="Correlacion (r)"
                       />
                       <p className="text-[9px] font-mono text-ink/40 mt-2">
                         r &gt; 0: picos de ICD tienden a preceder subidas de precio. r &lt; 0: tienden a preceder bajadas.
                       </p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
+                        Retorno real por sector en esta ventana (Buy &amp; Hold)
+                      </h3>
+                      <p className="text-[9px] font-mono text-ink/40 mb-3">
+                        Cuanto se hubiera ganado o perdido invirtiendo en cada sector el primer dia de la ventana
+                        activa ({activeWindow.start}) y manteniendo hasta {activeWindow.end ?? 'hoy'} — sin rotar,
+                        sin ICD, solo el precio del ETF.
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px] font-mono">
+                          <thead>
+                            <tr className="text-ink/50 border-b border-border">
+                              <th className="text-left py-2 px-2">Sector</th>
+                              <th className="text-right py-2 px-2">Inicio ({sectorReturns[0]?.startDate ?? '—'})</th>
+                              <th className="text-right py-2 px-2">Fin ({sectorReturns[0]?.endDate ?? '—'})</th>
+                              <th className="text-right py-2 px-2">Retorno</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sectorReturns.map((r) => (
+                              <tr key={r.ticker} className="border-b border-border/40">
+                                <td className="py-2 px-2">
+                                  {r.sector} <span className="text-ink/40">({r.ticker})</span>
+                                </td>
+                                <td className="text-right py-2 px-2 text-ink/60">{r.startClose.toFixed(2)}</td>
+                                <td className="text-right py-2 px-2 text-ink/60">{r.endClose.toFixed(2)}</td>
+                                <td className={cn('text-right py-2 px-2 font-bold', r.returnPct >= 0 ? 'text-accent' : 'text-danger')}>
+                                  {r.returnPct >= 0 ? '+' : ''}
+                                  {r.returnPct.toFixed(1)}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {sectorReturns.length === 0 && (
+                          <p className="text-[11px] font-mono text-ink/40 py-8 text-center">Sin datos en esta ventana.</p>
+                        )}
+                      </div>
                     </div>
 
                     <div>

@@ -12,9 +12,11 @@ interface Props {
   cellFormat?: (v: number) => string;
   /** alto de cada fila en px, para no aplastar heatmaps con pocas filas */
   rowHeight?: number;
+  /** que representa el color, mostrado junto a la leyenda de gradiente */
+  legendLabel?: string;
 }
 
-export default function Heatmap({ rowLabels, colLabels, values, scaleType, cellFormat, rowHeight = 34 }: Props) {
+export default function Heatmap({ rowLabels, colLabels, values, scaleType, cellFormat, rowHeight = 34, legendLabel }: Props) {
   const { color, legendStops } = useMemo(() => {
     const flat = values.flat().filter((v): v is number => v !== null);
     if (flat.length === 0) {
@@ -69,6 +71,7 @@ export default function Heatmap({ rowLabels, colLabels, values, scaleType, cellF
       </table>
       {legendStops.length > 0 && (
         <div className="flex items-center gap-2 mt-3 text-[9px] font-mono text-ink/50">
+          {legendLabel && <span className="text-ink/70">{legendLabel}:</span>}
           <span>{legendStops[0].toFixed(2)}</span>
           <div
             className="h-2 w-32 rounded"

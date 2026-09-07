@@ -272,6 +272,44 @@ export function latestRanking(sectorMetrics: Record<string, DensityRow[]>): Rank
   return rows.sort((a, b) => (b.ICD ?? -Infinity) - (a.ICD ?? -Infinity));
 }
 
+export interface SectorReturnRow {
+  ticker: string;
+  sector: string;
+  startDate: string;
+  endDate: string;
+  startClose: number;
+  endClose: number;
+  returnPct: number; // ej. 12.4 = +12.4%
+}
+
+/**
+ * Retorno Buy & Hold por sector dentro de la ventana activa: cuanto se
+ * hubiera ganado/perdido (%) si se hubiera puesto capital en el sector al
+ * inicio del periodo y se hubiera mantenido hasta el final (o hasta hoy,
+ * en la ventana de Tiempo Real). Independiente del ICD -- es el retorno
+ * de precio puro, para poder comparar "densidad de capital alta" contra
+ * "resultado real de haber invertido ahi".
+ */
+export function sectorBuyAndHoldReturns(sectorMetrics: Record<string, DensityRow[]>): SectorReturnRow[] {
+  const rows: SectorReturnRow[] = [];
+  for (const [ticker, series] of Object.entries(sectorMetrics)) {
+    if (series.length < 2) continue;
+    const first = series[0];
+    const last = series[series.length - 1];
+    if (first.close === 0) continue;
+    rows.push({
+      ticker,
+      sector: SECTOR_NAMES[ticker] ?? ticker,
+      startDate: first.date,
+      endDate: last.date,
+      startClose: first.close,
+      endClose: last.close,
+      returnPct: (last.close / first.close - 1) * 100,
+    });
+  }
+  return rows.sort((a, b) => b.returnPct - a.returnPct);
+}
+
 // ─── Backtesting: correlacion rezagada ──────────────────────────────────
 
 export const LAGS = [1, 3, 5, 10] as const;

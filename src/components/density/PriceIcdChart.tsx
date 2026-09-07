@@ -65,7 +65,30 @@ export default function PriceIcdChart({ data, ticker, zThreshold }: Props) {
   const { innerW, innerH, xScale, priceScale, icdScale, candleWidth, icdPath, xTicks, priceTicks, icdTicks } = chart;
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-[420px]" role="img" aria-label={`Precio y ICD de ${ticker}`}>
+    <div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] font-mono text-ink/60 mb-2">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--color-accent)' }} />
+          Vela alcista (cierre ≥ apertura)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--color-danger)' }} />
+          Vela bajista (cierre &lt; apertura)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 inline-block" style={{ background: '#f97316' }} />
+          ICD (eje derecho)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0 border-t border-dashed inline-block" style={{ borderColor: 'var(--color-accent)' }} />
+          +Umbral Z ({zThreshold})
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0 border-t border-dashed inline-block" style={{ borderColor: 'var(--color-danger)' }} />
+          -Umbral Z (-{zThreshold})
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-[420px]" role="img" aria-label={`Precio y ICD de ${ticker}`}>
       <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
         {/* grid + eje de precio (izquierda) */}
         {priceTicks.map((t) => (
@@ -148,6 +171,7 @@ export default function PriceIcdChart({ data, ticker, zThreshold }: Props) {
         {/* linea ICD */}
         <path d={icdPath} fill="none" stroke="#f97316" strokeWidth={1.4} />
       </g>
-    </svg>
+      </svg>
+    </div>
   );
 }
