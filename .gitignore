@@ -9,3 +9,8 @@ coverage/
 # Added by code-review-graph
 .code-review-graph/
 .next/
+
+# Python (capital-density-lab/)
+__pycache__/
+*.pyc
+.streamlit/
