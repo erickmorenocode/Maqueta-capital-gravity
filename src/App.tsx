@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Globe,
@@ -17,6 +18,7 @@ import {
   Moon,
   ChevronDown,
   FileDown,
+  Compass,
 } from 'lucide-react';
 import { SCENARIOS, GEO_POINTS, GEO_EVENTS, COUNTRY_SECTOR_COMPANIES, MarketScenario, GeoPoint, GeopoliticalEvent, CompanyGravityResult, DEFAULT_PRICES, MarketPrices } from './data';
 import { WorldMap, SECTORS, getSectorData } from './components/WorldMap';
@@ -264,6 +266,14 @@ export default function App() {
               <span>CAPAS: MULTI-ACTIVO</span>
             </div>
           </div>
+          <Link
+            href="/densidad-capital"
+            className="flex items-center gap-2 px-4 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest border border-border text-ink/70 hover:border-accent/40 hover:text-accent transition-all"
+            title="Laboratorio de Backtesting: Rotacion Sectorial por Densidad de Capital"
+          >
+            <Compass className="w-3 h-3" />
+            Densidad de Capital
+          </Link>
           <button
             onClick={() => setDarkMode(d => !d)}
             className="p-2 rounded border border-border hover:border-accent/40 hover:bg-accent/5 transition-all"
