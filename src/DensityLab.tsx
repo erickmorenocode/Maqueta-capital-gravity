@@ -19,6 +19,7 @@ import {
   lagCorrelationMatrix,
   eventStudy,
   simulateIcdRotationStrategy,
+  simulateIcdExitStrategy,
   buyAndHoldCurve,
   sectorBuyAndHoldReturns,
   type WindowKey,
@@ -61,6 +62,7 @@ function Slider({
   step,
   onChange,
   suffix = '',
+  disabled = false,
 }: {
   label: string;
   value: number;
@@ -69,9 +71,10 @@ function Slider({
   step: number;
   onChange: (v: number) => void;
   suffix?: string;
+  disabled?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className={cn('space-y-1.5', disabled && 'opacity-40')}>
       <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-ink/60">
         <span>{label}</span>
         <span className="text-accent">
@@ -85,6 +88,7 @@ function Slider({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-[var(--color-accent)]"
       />
@@ -99,12 +103,13 @@ export default function DensityLab() {
   const [error, setError] = useState<string | null>(null);
 
   const [windowKey, setWindowKey] = useState<WindowKey>('backtest');
-  const [rollingWindow, setRollingWindow] = useState(20);
+  const [rollingWindow, setRollingWindow] = useState(44);
   const [zThreshold, setZThreshold] = useState(2.0);
   const [freeFloatRatio, setFreeFloatRatio] = useState(DEFAULT_FREE_FLOAT_RATIO);
   const [heatmapDays, setHeatmapDays] = useState(30);
-  const [lookbackDays, setLookbackDays] = useState(3);
+  const [lookbackDays, setLookbackDays] = useState(9);
   const [holdDays, setHoldDays] = useState(5);
+  const [strategyMethod, setStrategyMethod] = useState<'fixed' | 'icdExit'>('icdExit');
   const [selectedTicker, setSelectedTicker] = useState<string>('XLK');
   const [activeTab, setActiveTab] = useState<TabKey>('grafico');
 
@@ -157,10 +162,15 @@ export default function DensityLab() {
   const corrMatrix = useMemo(() => lagCorrelationMatrix(sectorMetricsWindow), [sectorMetricsWindow]);
   const sectorReturns = useMemo(() => sectorBuyAndHoldReturns(sectorMetricsWindow), [sectorMetricsWindow]);
   const events = useMemo(() => eventStudy(sectorMetricsWindow, zThreshold), [sectorMetricsWindow, zThreshold]);
-  const strategyCurve = useMemo(
+  const fixedHoldCurve = useMemo(
     () => simulateIcdRotationStrategy(sectorMetricsWindow, lookbackDays, holdDays),
     [sectorMetricsWindow, lookbackDays, holdDays]
   );
+  const icdExitCurve = useMemo(
+    () => simulateIcdExitStrategy(sectorMetricsWindow, lookbackDays),
+    [sectorMetricsWindow, lookbackDays]
+  );
+  const strategyCurve = strategyMethod === 'fixed' ? fixedHoldCurve : icdExitCurve;
   const benchmarkCurve = useMemo(() => {
     if (!data || strategyCurve.length === 0) return [];
     const spyBars = data.priceBars[BENCHMARK];
@@ -253,8 +263,40 @@ export default function DensityLab() {
           <section className="glass rounded-lg p-4 space-y-4">
             <h2 className="text-[10px] font-mono uppercase tracking-widest text-ink/50">Backtest y mapa</h2>
             <Slider label="Dias en mapa de rotacion" value={heatmapDays} min={10} max={90} step={5} onChange={setHeatmapDays} suffix="d" />
+
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-mono text-ink/50">Estrategia: metodologia de salida</span>
+              {([
+                { key: 'fixed' as const, label: 'M1: tenencia fija' },
+                { key: 'icdExit' as const, label: 'M2: sale si ICD < 0' },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setStrategyMethod(key)}
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded text-[11px] font-mono border transition-all',
+                    strategyMethod === key ? 'bg-accent/15 border-accent/40 text-accent' : 'border-border text-ink/60 hover:border-accent/20'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <Slider label="Estrategia: lookback delta ICD" value={lookbackDays} min={1} max={10} step={1} onChange={setLookbackDays} suffix="d" />
-            <Slider label="Estrategia: dias de tenencia" value={holdDays} min={1} max={20} step={1} onChange={setHoldDays} suffix="d" />
+            <Slider
+              label="Estrategia: dias de tenencia"
+              value={holdDays}
+              min={1}
+              max={20}
+              step={1}
+              onChange={setHoldDays}
+              suffix="d"
+              disabled={strategyMethod === 'icdExit'}
+            />
+            {strategyMethod === 'icdExit' && (
+              <p className="text-[9px] font-mono text-ink/40">M2 no usa dias de tenencia -- sale por señal (ICD &lt; 0), no por plazo.</p>
+            )}
           </section>
 
           <section className="glass rounded-lg p-4 space-y-3">
@@ -495,7 +537,8 @@ export default function DensityLab() {
 
                     <div>
                       <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
-                        Estrategia: comprar mayor delta ICD ({lookbackDays}d) y mantener {holdDays}d
+                        Estrategia: comprar mayor delta ICD ({lookbackDays}d) —{' '}
+                        {strategyMethod === 'fixed' ? `M1: mantener ${holdDays}d` : 'M2: sale si ICD < 0'}
                       </h3>
                       <EquityCurveChart strategy={strategyCurve} benchmark={benchmarkCurve} />
                       {strategyCurve.length >= 2 && (

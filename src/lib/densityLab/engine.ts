@@ -509,6 +509,96 @@ export function simulateIcdRotationStrategy(
   return equity.length >= 2 ? equity : [];
 }
 
+/**
+ * Metodologia 2 de la estrategia ICD: en vez de tenencia a plazo fijo
+ * (`simulateIcdRotationStrategy`, holdDays constante), sale de la
+ * posicion apenas el ICD del sector en cartera cae por debajo de 0 --
+ * "corta la posicion cuando el momento de densidad se apaga" -- y rota
+ * el mismo dia a lo que tenga mejor delta de ICD en ese momento. Sin
+ * plazo fijo: puede aguantar una posicion ganadora mucho mas que
+ * holdDays si el ICD se mantiene positivo, o cortarla mucho antes si se
+ * apaga rapido. Entrada usa la misma regla que la Metodologia 1 (mayor
+ * delta de ICD en `lookbackDays`) para que la unica diferencia real entre
+ * ambas sea la regla de salida.
+ *
+ * Funcion nueva e independiente -- no toca simulateIcdRotationStrategy.
+ */
+export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow[]>, lookbackDays: number): EquityPoint[] {
+  const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
+  if (tickers.length === 0) return [];
+
+  const dateSet = new Set<string>();
+  for (const t of tickers) for (const r of sectorMetrics[t]) dateSet.add(r.date);
+  const dates = Array.from(dateSet).sort();
+
+  const icdByTicker: Record<string, Map<string, number | null>> = {};
+  const closeByTicker: Record<string, Map<string, number>> = {};
+  for (const t of tickers) {
+    icdByTicker[t] = new Map(sectorMetrics[t].map((r) => [r.date, r.ICD]));
+    closeByTicker[t] = new Map(sectorMetrics[t].map((r) => [r.date, r.close]));
+  }
+
+  function pickBestTicker(date: string, lookbackDate: string): string | null {
+    let bestTicker: string | null = null;
+    let bestDelta = -Infinity;
+    for (const t of tickers) {
+      const now = icdByTicker[t].get(date);
+      const before = icdByTicker[t].get(lookbackDate);
+      if (now === null || now === undefined || before === null || before === undefined) continue;
+      const delta = now - before;
+      if (delta > bestDelta) {
+        bestDelta = delta;
+        bestTicker = t;
+      }
+    }
+    return bestTicker;
+  }
+
+  const equity: EquityPoint[] = [];
+  let equityValue = 1.0;
+  let position: { ticker: string; entryPrice: number } | null = null;
+
+  for (let i = lookbackDays; i < dates.length; i++) {
+    const date = dates[i];
+
+    if (position) {
+      const icdNow = icdByTicker[position.ticker].get(date);
+      const closeNow = closeByTicker[position.ticker].get(date);
+      if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
+        equityValue *= 1 + (closeNow / position.entryPrice - 1);
+        equity.push({ date, value: equityValue });
+        position = null;
+      }
+    }
+
+    if (!position) {
+      const lookbackDate = dates[i - lookbackDays];
+      const bestTicker = pickBestTicker(date, lookbackDate);
+      if (bestTicker !== null) {
+        const entryPrice = closeByTicker[bestTicker].get(date);
+        if (entryPrice !== undefined) {
+          position = { ticker: bestTicker, entryPrice };
+          if (equity.length === 0) equity.push({ date, value: 1.0 });
+        }
+      }
+    }
+  }
+
+  // Mark-to-market de la posicion que quede abierta al final del periodo
+  // -- si no, la curva ignora la ganancia/perdida no realizada del ultimo
+  // tramo.
+  if (position) {
+    const lastDate = dates[dates.length - 1];
+    const lastClose = closeByTicker[position.ticker].get(lastDate);
+    if (lastClose !== undefined) {
+      equityValue *= 1 + (lastClose / position.entryPrice - 1);
+      equity.push({ date: lastDate, value: equityValue });
+    }
+  }
+
+  return equity.length >= 2 ? equity : [];
+}
+
 export function buyAndHoldCurve(bars: PriceBar[], alignedDates: string[]): EquityPoint[] {
   if (alignedDates.length === 0 || bars.length === 0) return [];
   const closeMap = new Map(bars.map((b) => [b.date, b.close]));
