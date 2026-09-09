@@ -180,6 +180,7 @@ export default function DensityLab() {
     const spyWindow = spyBars.filter((b) => b.date >= activeWindow.start && (activeWindow.end === null || b.date <= activeWindow.end));
     return buyAndHoldCurve(spyWindow, strategyCurve.map((p) => p.date));
   }, [data, strategyCurve, activeWindow]);
+  const benchmarkStats = useMemo(() => computeStrategyStats(benchmarkCurve), [benchmarkCurve]);
 
   const selectedInfo = data?.staticInfos[selectedTicker];
   const selectedSeries = sectorMetricsWindow[selectedTicker] ?? [];
@@ -544,44 +545,75 @@ export default function DensityLab() {
                       </h3>
                       <EquityCurveChart strategy={strategyCurve} benchmark={benchmarkCurve} />
                       {strategyCurve.length >= 2 && (
-                        <div className="grid grid-cols-3 gap-4 mt-4">
-                          <StatCard label="Retorno estrategia" value={`${((strategyCurve[strategyCurve.length - 1].value / strategyCurve[0].value - 1) * 100).toFixed(1)}%`} />
-                          {benchmarkCurve.length >= 2 && (
-                            <>
-                              <StatCard label="Retorno Buy & Hold SPY" value={`${((benchmarkCurve[benchmarkCurve.length - 1].value / benchmarkCurve[0].value - 1) * 100).toFixed(1)}%`} />
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">Estrategia ICD</div>
+                            <div className="grid grid-cols-4 gap-4">
+                              <StatCard label="Retorno" value={`${((strategyCurve[strategyCurve.length - 1].value / strategyCurve[0].value - 1) * 100).toFixed(1)}%`} />
+                              <StatCard label="Sharpe (anualizado)" value={strategyStats.sharpe !== null ? strategyStats.sharpe.toFixed(2) : '—'} />
                               <StatCard
-                                label="Alpha simple"
-                                value={`${(
-                                  ((strategyCurve[strategyCurve.length - 1].value / strategyCurve[0].value - 1) -
-                                    (benchmarkCurve[benchmarkCurve.length - 1].value / benchmarkCurve[0].value - 1)) *
-                                  100
-                                ).toFixed(1)} pp`}
+                                label="Profit factor"
+                                value={
+                                  strategyStats.profitFactor === null
+                                    ? '—'
+                                    : strategyStats.profitFactor === Infinity
+                                      ? '∞'
+                                      : strategyStats.profitFactor.toFixed(2)
+                                }
                               />
-                            </>
+                              <StatCard
+                                label="Riesgo:Beneficio"
+                                value={strategyStats.riskReward !== null ? `1 : ${strategyStats.riskReward.toFixed(2)}` : '—'}
+                              />
+                            </div>
+                            <p className="text-[9px] font-mono text-ink/40 mt-1.5">
+                              {strategyStats.trades} trades ({strategyStats.wins} ganadores / {strategyStats.losses} perdedores)
+                            </p>
+                          </div>
+
+                          {benchmarkCurve.length >= 2 && (
+                            <div>
+                              <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">
+                                SPY Buy &amp; Hold (mismos periodos que la estrategia)
+                              </div>
+                              <div className="grid grid-cols-4 gap-4">
+                                <StatCard label="Retorno" value={`${((benchmarkCurve[benchmarkCurve.length - 1].value / benchmarkCurve[0].value - 1) * 100).toFixed(1)}%`} />
+                                <StatCard label="Sharpe (anualizado)" value={benchmarkStats.sharpe !== null ? benchmarkStats.sharpe.toFixed(2) : '—'} />
+                                <StatCard
+                                  label="Profit factor"
+                                  value={
+                                    benchmarkStats.profitFactor === null
+                                      ? '—'
+                                      : benchmarkStats.profitFactor === Infinity
+                                        ? '∞'
+                                        : benchmarkStats.profitFactor.toFixed(2)
+                                  }
+                                />
+                                <StatCard
+                                  label="Riesgo:Beneficio"
+                                  value={benchmarkStats.riskReward !== null ? `1 : ${benchmarkStats.riskReward.toFixed(2)}` : '—'}
+                                />
+                              </div>
+                            </div>
                           )}
-                          <StatCard label="Sharpe (anualizado)" value={strategyStats.sharpe !== null ? strategyStats.sharpe.toFixed(2) : '—'} />
-                          <StatCard
-                            label="Profit factor"
-                            value={
-                              strategyStats.profitFactor === null
-                                ? '—'
-                                : strategyStats.profitFactor === Infinity
-                                  ? '∞'
-                                  : strategyStats.profitFactor.toFixed(2)
-                            }
-                          />
-                          <StatCard
-                            label="Riesgo:Beneficio"
-                            value={strategyStats.riskReward !== null ? `1 : ${strategyStats.riskReward.toFixed(2)}` : '—'}
-                          />
+
+                          {benchmarkCurve.length >= 2 && (
+                            <StatCard
+                              label="Alpha simple (retorno estrategia − retorno SPY)"
+                              value={`${(
+                                ((strategyCurve[strategyCurve.length - 1].value / strategyCurve[0].value - 1) -
+                                  (benchmarkCurve[benchmarkCurve.length - 1].value / benchmarkCurve[0].value - 1)) *
+                                100
+                              ).toFixed(1)} pp`}
+                            />
+                          )}
+
+                          <p className="text-[9px] font-mono text-ink/40">
+                            Sharpe con Rf=0, anualizado por dias reales entre periodos. Profit factor = ganancia bruta / |perdida bruta|.
+                            Riesgo:Beneficio = perdida promedio : ganancia promedio por periodo. SPY se corta en los mismos periodos
+                            (entrada/salida) que la estrategia, no dia a dia -- compara riesgo/retorno bajo el mismo calendario de trades.
+                          </p>
                         </div>
-                      )}
-                      {strategyCurve.length >= 2 && (
-                        <p className="text-[9px] font-mono text-ink/40 mt-2">
-                          {strategyStats.trades} trades ({strategyStats.wins} ganadores / {strategyStats.losses} perdedores). Sharpe con Rf=0,
-                          anualizado por dias reales entre trades. Profit factor = ganancia bruta / |perdida bruta|. Riesgo:Beneficio = perdida
-                          promedio : ganancia promedio por trade.
-                        </p>
                       )}
                     </div>
                   </div>
