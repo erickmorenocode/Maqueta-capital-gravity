@@ -63,6 +63,35 @@ export interface TickerStaticInfo {
   source: 'info' | 'proxy';
 }
 
+/**
+ * Punto real de tamano (market cap / shares outstanding) en una fecha
+ * concreta -- viene de un N-CSR/N-CSRS de SEC EDGAR (ver
+ * scripts/fetchEdgarHistoricalSize.mjs) o del fetch en vivo de Yahoo
+ * Finance para el punto "hoy". `floatShares` solo esta poblado en el
+ * punto en vivo (Yahoo a veces lo expone, EDGAR Financial Highlights no).
+ */
+export interface SizeAnchor {
+  date: string; // 'YYYY-MM-DD'
+  marketCap: number;
+  sharesOutstanding: number;
+  floatShares?: number;
+}
+
+/**
+ * Ancla de tamano vigente en `date`: la mas reciente con date <= la
+ * pedida (forward-fill). Si `date` es anterior a la primera ancla
+ * conocida, usa la primera igual -- no hay dato mas viejo para extrapolar.
+ */
+export function sizeAt(anchors: SizeAnchor[], date: string): SizeAnchor | null {
+  if (anchors.length === 0) return null;
+  let result = anchors[0];
+  for (const a of anchors) {
+    if (a.date <= date) result = a;
+    else break;
+  }
+  return result;
+}
+
 export interface DensityRow extends PriceBar {
   VMC: number;
   STR: number;
@@ -130,28 +159,45 @@ function pearsonCorrelation(xs: number[], ys: number[]): number | null {
 /**
  * Calcula VMC, STR, FFT y el Indicador Compuesto de Densidad (ICD).
  *
- * Nota metodologica (igual que en la version Python): market_cap y
- * shares_outstanding vienen de Yahoo Finance como valores ACTUALES
- * (Yahoo no expone series historicas de esto para ETFs), aplicados de
- * forma constante a toda la serie historica. Consecuencia real: como
- * shares_outstanding y free_float son constantes, STR y FFT quedan
- * proporcionales entre si -- su z-score sale identico dia a dia. El ICD
- * en la practica queda dominado por VMC (liquidez en dolares) mas la
- * senal de rotacion de acciones contada dos veces. Se mantiene asi
- * porque es la formula pedida explicitamente; queda documentado para
- * quien audite el modelo despues.
+ * Nota metodologica: market_cap/shares_outstanding/free_float varian por
+ * fecha usando `sizeSeries` (forward-fill sobre anclas reales de SEC EDGAR
+ * N-CSR/N-CSRS -- ver scripts/fetchEdgarHistoricalSize.mjs -- mas el punto
+ * "hoy" de Yahoo Finance en vivo). Antes se aplicaba el valor ACTUAL de
+ * Yahoo constante a toda la serie 2018-presente -- sesgo de look-ahead en
+ * Backtest/Validacion (denominador de 2026 aplicado a datos de 2018-2023).
+ * Limitacion residual: la ultima ancla real de EDGAR es sep-2025 (el
+ * formato HTML de los N-CSRS de 2026 partio los valores en spans no
+ * parseables de forma confiable). El punto en vivo se fecha el dia
+ * siguiente a esa ultima ancla (no "hoy" -- ver addDaysISO en
+ * app/api/density-lab/route.ts), asi que cubre TODA la ventana Live
+ * (ene-2026 en adelante) con el tamano actual, no solo el ultimo dia. Es
+ * el trade-off correcto: para esos ~9 meses sin ancla real, el tamano
+ * actual (creciendo/decreciendo hacia el valor real de esa fecha) es
+ * mejor estimador que quedarse pegado en sep-2025. Sigue sin aplicar
+ * nunca un valor de 2026 hacia atras en Backtest/Validacion.
  */
 export function computeDensityMetrics(
   bars: PriceBar[],
-  info: TickerStaticInfo,
+  sizeSeries: SizeAnchor[],
   freeFloatRatio: number,
   rollingWindow: number
 ): DensityRow[] {
-  const freeFloat = info.floatSharesDirect ?? info.sharesOutstanding * freeFloatRatio;
+  const sizeFor = (date: string) => sizeAt(sizeSeries, date);
 
-  const vmc = bars.map((b) => (b.volume * b.close) / info.marketCap);
-  const str_ = bars.map((b) => b.volume / info.sharesOutstanding);
-  const fft = bars.map((b) => b.volume / freeFloat);
+  const vmc = bars.map((b) => {
+    const sz = sizeFor(b.date);
+    return sz ? (b.volume * b.close) / sz.marketCap : NaN;
+  });
+  const str_ = bars.map((b) => {
+    const sz = sizeFor(b.date);
+    return sz ? b.volume / sz.sharesOutstanding : NaN;
+  });
+  const fft = bars.map((b) => {
+    const sz = sizeFor(b.date);
+    if (!sz) return NaN;
+    const freeFloat = sz.floatShares ?? sz.sharesOutstanding * freeFloatRatio;
+    return b.volume / freeFloat;
+  });
 
   const { mean: mVMC, std: sVMC } = rollingMeanStd(vmc, rollingWindow);
   const { mean: mSTR, std: sSTR } = rollingMeanStd(str_, rollingWindow);
@@ -190,15 +236,15 @@ export function computeDensityMetrics(
 
 export function computeAllSectorsDensity(
   priceBars: Record<string, PriceBar[]>,
-  staticInfos: Record<string, TickerStaticInfo>,
+  sizeSeries: Record<string, SizeAnchor[]>,
   freeFloatRatio: number,
   rollingWindow: number
 ): Record<string, DensityRow[]> {
   const out: Record<string, DensityRow[]> = {};
   for (const [ticker, bars] of Object.entries(priceBars)) {
-    const info = staticInfos[ticker];
-    if (!info) continue;
-    out[ticker] = computeDensityMetrics(bars, info, freeFloatRatio, rollingWindow);
+    const series = sizeSeries[ticker];
+    if (!series || series.length === 0) continue;
+    out[ticker] = computeDensityMetrics(bars, series, freeFloatRatio, rollingWindow);
   }
   return out;
 }

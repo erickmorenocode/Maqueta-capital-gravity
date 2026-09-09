@@ -23,6 +23,7 @@ import {
   sectorBuyAndHoldReturns,
   type WindowKey,
   type PriceBar,
+  type SizeAnchor,
   type TickerStaticInfo,
   type DensityRow,
 } from '@/src/lib/densityLab/engine';
@@ -37,6 +38,7 @@ function cn(...inputs: ClassValue[]) {
 interface ApiResponse {
   asOf: string;
   priceBars: Record<string, PriceBar[]>;
+  sizeSeries: Record<string, SizeAnchor[]>;
   staticInfos: Record<string, TickerStaticInfo>;
   missingPrice: string[];
   missingStatic: string[];
@@ -136,7 +138,7 @@ export default function DensityLab() {
     for (const t of SECTOR_ETFS) {
       if (data.priceBars[t]) sectorBars[t] = data.priceBars[t];
     }
-    return computeAllSectorsDensity(sectorBars, data.staticInfos, freeFloatRatio, rollingWindow);
+    return computeAllSectorsDensity(sectorBars, data.sizeSeries, freeFloatRatio, rollingWindow);
   }, [data, freeFloatRatio, rollingWindow]);
 
   const activeWindow = WINDOWS[windowKey];

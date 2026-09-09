@@ -1,0 +1,849 @@
+{
+ "XLC": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 2035011000,
+   "sharesOutstanding": 41547795
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 5287001000,
+   "sharesOutstanding": 113042570
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 6039403000,
+   "sharesOutstanding": 122008141
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 6534025000,
+   "sharesOutstanding": 147761759
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 10106071000,
+   "sharesOutstanding": 170135875
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 12686977000,
+   "sharesOutstanding": 173106522
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 15176057000,
+   "sharesOutstanding": 189345689
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 11849160000,
+   "sharesOutstanding": 172351418
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 7578050000,
+   "sharesOutstanding": 158238672
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 10013002000,
+   "sharesOutstanding": 172697516
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 13110317000,
+   "sharesOutstanding": 199913342
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 18190987000,
+   "sharesOutstanding": 222737688
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 18637826000,
+   "sharesOutstanding": 206147838
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 20307352000,
+   "sharesOutstanding": 210547973
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 27469332000,
+   "sharesOutstanding": 232043690
+  }
+ ],
+ "XLY": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 16218942000,
+   "sharesOutstanding": 138398686
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 12687503000,
+   "sharesOutstanding": 111450307
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 13928314000,
+   "sharesOutstanding": 115405701
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 9974458000,
+   "sharesOutstanding": 101707535
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 15809198000,
+   "sharesOutstanding": 107552881
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 19378155000,
+   "sharesOutstanding": 115353027
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 19633737000,
+   "sharesOutstanding": 109355781
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 19817210000,
+   "sharesOutstanding": 107154807
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 14098639000,
+   "sharesOutstanding": 98951706
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 14334697000,
+   "sharesOutstanding": 95852203
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 17432110000,
+   "sharesOutstanding": 108300882
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 20055492000,
+   "sharesOutstanding": 109003163
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 19443914000,
+   "sharesOutstanding": 97001317
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 19893732000,
+   "sharesOutstanding": 100753264
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 24638782000,
+   "sharesOutstanding": 102802946
+  }
+ ],
+ "XLP": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 9256716000,
+   "sharesOutstanding": 171675000
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 10807390000,
+   "sharesOutstanding": 192610765
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 14015004000,
+   "sharesOutstanding": 228220225
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 12669778000,
+   "sharesOutstanding": 232430343
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 13687240000,
+   "sharesOutstanding": 213429596
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 10773525000,
+   "sharesOutstanding": 158015914
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 11757576000,
+   "sharesOutstanding": 170820514
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 15320795000,
+   "sharesOutstanding": 202228023
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 14465958000,
+   "sharesOutstanding": 216815917
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 16989675000,
+   "sharesOutstanding": 227377877
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 16206233000,
+   "sharesOutstanding": 235521479
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 15614477000,
+   "sharesOutstanding": 204485031
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 17898708000,
+   "sharesOutstanding": 215569168
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 16779713000,
+   "sharesOutstanding": 205532986
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 16059101000,
+   "sharesOutstanding": 204861602
+  }
+ ],
+ "XLE": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 18435159000,
+   "sharesOutstanding": 243368436
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 13796826000,
+   "sharesOutstanding": 208663430
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 10014781000,
+   "sharesOutstanding": 169225769
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 6635742000,
+   "sharesOutstanding": 228267699
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 8430789000,
+   "sharesOutstanding": 281307608
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 22376872000,
+   "sharesOutstanding": 456764074
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 25084339000,
+   "sharesOutstanding": 481280487
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 36711961000,
+   "sharesOutstanding": 480397291
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 33531192000,
+   "sharesOutstanding": 465840400
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 38065301000,
+   "sharesOutstanding": 459670342
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 39039650000,
+   "sharesOutstanding": 431854535
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 39542952000,
+   "sharesOutstanding": 418887203
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 35460368000,
+   "sharesOutstanding": 403830634
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 33409439000,
+   "sharesOutstanding": 357587916
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 26863518000,
+   "sharesOutstanding": 300688583
+  }
+ ],
+ "XLF": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 31053806000,
+   "sharesOutstanding": 1125953807
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 21855849000,
+   "sharesOutstanding": 850091365
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 22552204000,
+   "sharesOutstanding": 804860956
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 14924044000,
+   "sharesOutstanding": 717502115
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 16646404000,
+   "sharesOutstanding": 691870490
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 38432585000,
+   "sharesOutstanding": 1129705614
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 40412690000,
+   "sharesOutstanding": 1076810285
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 45882498000,
+   "sharesOutstanding": 1197663743
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 26953933000,
+   "sharesOutstanding": 889275256
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 29543804000,
+   "sharesOutstanding": 918650622
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 30598309000,
+   "sharesOutstanding": 922469370
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 38389202000,
+   "sharesOutstanding": 911208213
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 42293858000,
+   "sharesOutstanding": 933433194
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 52080589000,
+   "sharesOutstanding": 1045375130
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 54144460000,
+   "sharesOutstanding": 1004908315
+  }
+ ],
+ "XLV": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 19632378000,
+   "sharesOutstanding": 206417601
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 19434384000,
+   "sharesOutstanding": 211818899
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 16818717000,
+   "sharesOutstanding": 186605093
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 18700806000,
+   "sharesOutstanding": 211070045
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 23873455000,
+   "sharesOutstanding": 226160051
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 24608547000,
+   "sharesOutstanding": 210906299
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 30358856000,
+   "sharesOutstanding": 238557724
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 37032011000,
+   "sharesOutstanding": 270761212
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 35805067000,
+   "sharesOutstanding": 295860742
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 38474986000,
+   "sharesOutstanding": 297058261
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 37705483000,
+   "sharesOutstanding": 292926375
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 41112120000,
+   "sharesOutstanding": 278160487
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 41830223000,
+   "sharesOutstanding": 271607188
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 38484646000,
+   "sharesOutstanding": 263719907
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 34404707000,
+   "sharesOutstanding": 247106996
+  }
+ ],
+ "XLI": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 12925332000,
+   "sharesOutstanding": 164927038
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 10251601000,
+   "sharesOutstanding": 136633360
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 9802368000,
+   "sharesOutstanding": 126221581
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 6866592000,
+   "sharesOutstanding": 116284369
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 12179734000,
+   "sharesOutstanding": 158219460
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 20116669000,
+   "sharesOutstanding": 204479254
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 17367182000,
+   "sharesOutstanding": 177633037
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 16150926000,
+   "sharesOutstanding": 156926992
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 11104720000,
+   "sharesOutstanding": 134131175
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 13886528000,
+   "sharesOutstanding": 137232217
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 14412862000,
+   "sharesOutstanding": 142222834
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 18134544000,
+   "sharesOutstanding": 143924952
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 19537107000,
+   "sharesOutstanding": 144174651
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 19952633000,
+   "sharesOutstanding": 152228832
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 23918969000,
+   "sharesOutstanding": 155026048
+  }
+ ],
+ "XLB": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 4547766000,
+   "sharesOutstanding": 78518059
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 4103515000,
+   "sharesOutstanding": 73977195
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 4201473000,
+   "sharesOutstanding": 72227488
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 2200100000,
+   "sharesOutstanding": 48826010
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 3917044000,
+   "sharesOutstanding": 61569381
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 6915056000,
+   "sharesOutstanding": 87776796
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 7501906000,
+   "sharesOutstanding": 94828795
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 7730259000,
+   "sharesOutstanding": 87724228
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 4702427000,
+   "sharesOutstanding": 69173683
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 5377353000,
+   "sharesOutstanding": 66675177
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 4942608000,
+   "sharesOutstanding": 62923081
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 5832911000,
+   "sharesOutstanding": 62773472
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 5555902000,
+   "sharesOutstanding": 57621883
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 5207306000,
+   "sharesOutstanding": 60571199
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 5511330000,
+   "sharesOutstanding": 61476074
+  }
+ ],
+ "XLRE": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 2732078000,
+   "sharesOutstanding": 83754690
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 3079858000,
+   "sharesOutstanding": 85055454
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 3884273000,
+   "sharesOutstanding": 98710877
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 2858551000,
+   "sharesOutstanding": 92092494
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 2264406000,
+   "sharesOutstanding": 64147479
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 2492932000,
+   "sharesOutstanding": 63144174
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 4282141000,
+   "sharesOutstanding": 96292804
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 5730199000,
+   "sharesOutstanding": 118662228
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 4612173000,
+   "sharesOutstanding": 128115917
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 4651821000,
+   "sharesOutstanding": 124413506
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 4093339000,
+   "sharesOutstanding": 120144966
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 6169549000,
+   "sharesOutstanding": 155993654
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 8303552000,
+   "sharesOutstanding": 185886546
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 7352017000,
+   "sharesOutstanding": 175633469
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 7893228000,
+   "sharesOutstanding": 187265196
+  }
+ ],
+ "XLK": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 22959484000,
+   "sharesOutstanding": 304906826
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 19514832000,
+   "sharesOutstanding": 263713946
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 22417160000,
+   "sharesOutstanding": 278439449
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 23632339000,
+   "sharesOutstanding": 293971128
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 34095026000,
+   "sharesOutstanding": 292009472
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 38202879000,
+   "sharesOutstanding": 287954164
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 43022516000,
+   "sharesOutstanding": 288065055
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 47556511000,
+   "sharesOutstanding": 299662955
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 35656531000,
+   "sharesOutstanding": 300316104
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 43541526000,
+   "sharesOutstanding": 288297199
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 47587429000,
+   "sharesOutstanding": 290362005
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 65350024000,
+   "sharesOutstanding": 313549679
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 70090741000,
+   "sharesOutstanding": 310410722
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 64163190000,
+   "sharesOutstanding": 310762774
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 90179468000,
+   "sharesOutstanding": 319751331
+  }
+ ],
+ "XLU": [
+  {
+   "date": "2018-09-30",
+   "marketCap": 7642260000,
+   "sharesOutstanding": 145069476
+  },
+  {
+   "date": "2019-03-31",
+   "marketCap": 9361490000,
+   "sharesOutstanding": 160877986
+  },
+  {
+   "date": "2019-09-30",
+   "marketCap": 11296483000,
+   "sharesOutstanding": 174516963
+  },
+  {
+   "date": "2020-03-31",
+   "marketCap": 10260820000,
+   "sharesOutstanding": 185012982
+  },
+  {
+   "date": "2020-09-30",
+   "marketCap": 11405751000,
+   "sharesOutstanding": 192016010
+  },
+  {
+   "date": "2021-03-31",
+   "marketCap": 11974036000,
+   "sharesOutstanding": 187123551
+  },
+  {
+   "date": "2021-09-30",
+   "marketCap": 11956669000,
+   "sharesOutstanding": 187173904
+  },
+  {
+   "date": "2022-03-31",
+   "marketCap": 14899039000,
+   "sharesOutstanding": 200175185
+  },
+  {
+   "date": "2022-09-30",
+   "marketCap": 16119053000,
+   "sharesOutstanding": 246242789
+  },
+  {
+   "date": "2023-03-31",
+   "marketCap": 15463974000,
+   "sharesOutstanding": 228385379
+  },
+  {
+   "date": "2023-09-30",
+   "marketCap": 13186436000,
+   "sharesOutstanding": 223726434
+  },
+  {
+   "date": "2024-03-31",
+   "marketCap": 12320999000,
+   "sharesOutstanding": 187619903
+  },
+  {
+   "date": "2024-09-30",
+   "marketCap": 18501150000,
+   "sharesOutstanding": 229088039
+  },
+  {
+   "date": "2025-03-31",
+   "marketCap": 17958774000,
+   "sharesOutstanding": 227787595
+  },
+  {
+   "date": "2025-09-30",
+   "marketCap": 21227928000,
+   "sharesOutstanding": 243327923
+  }
+ ]
+}
