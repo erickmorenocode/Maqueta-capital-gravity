@@ -622,3 +622,65 @@ export function buyAndHoldCurve(bars: PriceBar[], alignedDates: string[]): Equit
     return { date: d, value: c / base };
   });
 }
+
+// ─── Metricas de la curva de equity (Sharpe, Profit Factor, R:B) ────────
+
+export interface StrategyStats {
+  trades: number;
+  wins: number;
+  losses: number;
+  sharpe: number | null;
+  profitFactor: number | null; // ganancia bruta / |perdida bruta|. null si no hay perdidas Y no hay ganancias (sin trades utiles)
+  riskReward: number | null; // ganancia promedio por trade ganador / |perdida promedio por trade perdedor|
+}
+
+/**
+ * Metricas de riesgo/retorno de una curva de equity (EquityPoint[] de
+ * simulateIcdRotationStrategy o simulateIcdExitStrategy -- misma forma,
+ * funciona con cualquiera de las dos metodologias sin cambios).
+ *
+ * Sharpe: retorno medio por trade / desvio estandar de esos retornos,
+ * anualizado por trades/año usando el promedio REAL de dias calendario
+ * entre trades (no un holdDays nominal) -- funciona igual para M1 (plazo
+ * fijo) y M2 (plazo variable), mismo criterio que se uso para elegir los
+ * defaults via grid search (scripts/gridSearchM2Fine.mjs). Rf=0
+ * (simplificacion, no resta tasa libre de riesgo).
+ *
+ * Profit Factor: `Infinity` si hubo ganancias y CERO perdidas (caso
+ * real, no bug) -- la UI lo debe mostrar como "∞", no como error.
+ */
+export function computeStrategyStats(curve: EquityPoint[]): StrategyStats {
+  const trades = curve.length >= 2 ? curve.length - 1 : 0;
+  if (trades === 0) return { trades: 0, wins: 0, losses: 0, sharpe: null, profitFactor: null, riskReward: null };
+
+  const returns: number[] = [];
+  for (let i = 1; i < curve.length; i++) returns.push(curve[i].value / curve[i - 1].value - 1);
+
+  const winReturns = returns.filter((r) => r > 0);
+  const lossReturns = returns.filter((r) => r < 0);
+  const grossProfit = winReturns.reduce((a, b) => a + b, 0);
+  const grossLoss = Math.abs(lossReturns.reduce((a, b) => a + b, 0));
+
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : null;
+
+  const avgWin = winReturns.length > 0 ? grossProfit / winReturns.length : null;
+  const avgLoss = lossReturns.length > 0 ? grossLoss / lossReturns.length : null;
+  const riskReward = avgWin !== null && avgLoss !== null && avgLoss > 0 ? avgWin / avgLoss : null;
+
+  let sharpe: number | null = null;
+  if (returns.length >= 2) {
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / (returns.length - 1);
+    const std = Math.sqrt(variance);
+    if (std > 0) {
+      const totalCalendarDays = (new Date(curve[curve.length - 1].date).getTime() - new Date(curve[0].date).getTime()) / 86400000;
+      const avgCalendarDaysPerTrade = totalCalendarDays / returns.length;
+      if (avgCalendarDaysPerTrade > 0) {
+        const periodsPerYear = 365 / avgCalendarDaysPerTrade;
+        sharpe = (mean / std) * Math.sqrt(periodsPerYear);
+      }
+    }
+  }
+
+  return { trades, wins: winReturns.length, losses: lossReturns.length, sharpe, profitFactor, riskReward };
+}

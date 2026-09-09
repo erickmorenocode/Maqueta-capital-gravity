@@ -20,6 +20,7 @@ import {
   eventStudy,
   simulateIcdRotationStrategy,
   simulateIcdExitStrategy,
+  computeStrategyStats,
   buyAndHoldCurve,
   sectorBuyAndHoldReturns,
   type WindowKey,
@@ -171,6 +172,7 @@ export default function DensityLab() {
     [sectorMetricsWindow, lookbackDays]
   );
   const strategyCurve = strategyMethod === 'fixed' ? fixedHoldCurve : icdExitCurve;
+  const strategyStats = useMemo(() => computeStrategyStats(strategyCurve), [strategyCurve]);
   const benchmarkCurve = useMemo(() => {
     if (!data || strategyCurve.length === 0) return [];
     const spyBars = data.priceBars[BENCHMARK];
@@ -557,7 +559,29 @@ export default function DensityLab() {
                               />
                             </>
                           )}
+                          <StatCard label="Sharpe (anualizado)" value={strategyStats.sharpe !== null ? strategyStats.sharpe.toFixed(2) : '—'} />
+                          <StatCard
+                            label="Profit factor"
+                            value={
+                              strategyStats.profitFactor === null
+                                ? '—'
+                                : strategyStats.profitFactor === Infinity
+                                  ? '∞'
+                                  : strategyStats.profitFactor.toFixed(2)
+                            }
+                          />
+                          <StatCard
+                            label="Riesgo:Beneficio"
+                            value={strategyStats.riskReward !== null ? `1 : ${strategyStats.riskReward.toFixed(2)}` : '—'}
+                          />
                         </div>
+                      )}
+                      {strategyCurve.length >= 2 && (
+                        <p className="text-[9px] font-mono text-ink/40 mt-2">
+                          {strategyStats.trades} trades ({strategyStats.wins} ganadores / {strategyStats.losses} perdedores). Sharpe con Rf=0,
+                          anualizado por dias reales entre trades. Profit factor = ganancia bruta / |perdida bruta|. Riesgo:Beneficio = perdida
+                          promedio : ganancia promedio por trade.
+                        </p>
                       )}
                     </div>
                   </div>
