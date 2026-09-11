@@ -8,8 +8,17 @@
  * (sliders instantaneos, sin ida y vuelta al servidor).
  */
 
+// Universo del laboratorio: los 11 sectores GICS del S&P 500 mas GLD
+// (oro) y QQQ (Nasdaq-100) como diversificadores -- agregados (grid
+// search offline, ver scripts/testExpandedUniverseGldQqq.mjs) porque
+// rotar SOLO entre sectores del propio S&P casi no puede ganarle a SPY
+// cuando el indice entero sube parejo (todo correlacionado); GLD/QQQ le
+// dan a la estrategia algo genuinamente distinto para rotar en esos
+// tramos. Un solo array alimenta route.ts y DensityLab.tsx (fetch,
+// calculo, selector de ticker, heatmap, ranking, etc.) -- ampliarlo aca
+// alcanza, no hace falta tocar nada mas.
 export const SECTOR_ETFS = [
-  'XLK', 'XLF', 'XLE', 'XLV', 'XLY', 'XLP', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLC',
+  'XLK', 'XLF', 'XLE', 'XLV', 'XLY', 'XLP', 'XLI', 'XLB', 'XLRE', 'XLU', 'XLC', 'GLD', 'QQQ',
 ] as const;
 
 export type SectorTicker = (typeof SECTOR_ETFS)[number];
@@ -28,6 +37,8 @@ export const SECTOR_NAMES: Record<string, string> = {
   XLRE: 'Bienes Raices',
   XLU: 'Servicios Publicos',
   XLC: 'Comunicaciones',
+  GLD: 'Oro',
+  QQQ: 'Nasdaq-100',
 };
 
 export const DEFAULT_FREE_FLOAT_RATIO = 0.95;

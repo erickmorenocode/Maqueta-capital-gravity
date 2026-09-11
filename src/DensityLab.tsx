@@ -104,7 +104,7 @@ export default function DensityLab() {
   const [error, setError] = useState<string | null>(null);
 
   const [windowKey, setWindowKey] = useState<WindowKey>('backtest');
-  const [rollingWindow, setRollingWindow] = useState(44);
+  const [rollingWindow, setRollingWindow] = useState(42);
   const [zThreshold, setZThreshold] = useState(2.0);
   const [freeFloatRatio, setFreeFloatRatio] = useState(DEFAULT_FREE_FLOAT_RATIO);
   const [heatmapDays, setHeatmapDays] = useState(30);
@@ -342,7 +342,7 @@ export default function DensityLab() {
 
           {loading && !data && (
             <div className="glass rounded-lg p-16 text-center text-[11px] font-mono text-ink/40">
-              Descargando historial 2018-presente de 11 ETFs sectoriales + SPY desde Yahoo Finance...
+              Descargando historial 2018-presente de 11 ETFs sectoriales + GLD + QQQ + SPY desde Yahoo Finance...
             </div>
           )}
 

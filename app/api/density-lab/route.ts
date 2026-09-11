@@ -21,14 +21,15 @@ function addDaysISO(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// GET /api/density-lab -- historial OHLCV (2018-hoy) de los 11 ETFs
-// sectoriales + SPY, mas la serie de tamano (market cap/shares
-// outstanding) de cada sectorial: anclas reales de SEC EDGAR
-// (historicalSize.json, ver scripts/fetchEdgarHistoricalSize.mjs) mas el
-// punto "hoy" en vivo de Yahoo Finance -- evita aplicar el tamano ACTUAL
-// hacia atras en el tiempo (ver nota en computeDensityMetrics). Todo el
-// calculo de metricas (VMC, STR, FFT, ICD, correlaciones, backtest) pasa
-// client-side en src/DensityLab.tsx -- esta ruta solo trae los datos crudos.
+// GET /api/density-lab -- historial OHLCV (2018-hoy) del universo del
+// lab (SECTOR_ETFS: 11 sectores + GLD + QQQ) + SPY, mas la serie de
+// tamano (market cap/shares outstanding) de cada uno: anclas reales de
+// SEC EDGAR (historicalSize.json, ver scripts/fetchEdgarHistoricalSize.mjs
+// y scripts/fetchEdgarHistoricalSizeExtra.mjs) mas el punto "hoy" en vivo
+// de Yahoo Finance -- evita aplicar el tamano ACTUAL hacia atras en el
+// tiempo (ver nota en computeDensityMetrics). Todo el calculo de metricas
+// (VMC, STR, FFT, ICD, correlaciones, backtest) pasa client-side en
+// src/DensityLab.tsx -- esta ruta solo trae los datos crudos.
 export async function GET() {
   const allTickers = [...SECTOR_ETFS, BENCHMARK];
   const today = new Date().toISOString().slice(0, 10);

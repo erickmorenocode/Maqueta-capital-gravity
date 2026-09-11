@@ -16,7 +16,7 @@
  * SEC exige un User-Agent identificable en cada request (no API key).
  */
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -141,7 +141,19 @@ async function main() {
     series[ticker].sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  writeFileSync(OUT_PATH, JSON.stringify(series, null, 1));
+  // Merge, no overwrite ciego -- historicalSize.json tambien lo escribe
+  // fetchEdgarHistoricalSizeExtra.mjs (GLD/QQQ, fuentes distintas). Este
+  // script solo administra los 11 tickers de SECTOR_ETFS; preserva
+  // cualquier otra clave ya presente en el archivo.
+  let existing = {};
+  try {
+    existing = JSON.parse(readFileSync(OUT_PATH, 'utf8'));
+  } catch {
+    // primera corrida, no hay archivo previo
+  }
+  const merged = { ...existing, ...series };
+
+  writeFileSync(OUT_PATH, JSON.stringify(merged, null, 1));
   console.log(`\nWrote ${OUT_PATH}`);
   for (const ticker of Object.keys(series).sort()) {
     console.log(`  ${ticker}: ${series[ticker].length} anchors, ${series[ticker][0].date} -> ${series[ticker][series[ticker].length - 1].date}`);
