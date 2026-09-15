@@ -21,6 +21,8 @@ import {
   simulateIcdRotationStrategy,
   simulateIcdExitStrategy,
   simulateIcdPriceVolFilterStrategy,
+  simulateIcdRegimeSwitchStrategy,
+  buildMarketRegimeMap,
   computeStrategyStats,
   buyAndHoldCurve,
   sectorBuyAndHoldReturns,
@@ -112,7 +114,7 @@ export default function DensityLab() {
   const [lookbackDays, setLookbackDays] = useState(9);
   const [holdDays, setHoldDays] = useState(5);
   const [priceVolK, setPriceVolK] = useState(0.25);
-  const [strategyMethod, setStrategyMethod] = useState<'fixed' | 'icdExit' | 'priceVolFilter'>('priceVolFilter');
+  const [strategyMethod, setStrategyMethod] = useState<'fixed' | 'icdExit' | 'priceVolFilter' | 'regimeSwitch'>('regimeSwitch');
   const [selectedTicker, setSelectedTicker] = useState<string>('XLK');
   const [activeTab, setActiveTab] = useState<TabKey>('grafico');
 
@@ -177,8 +179,27 @@ export default function DensityLab() {
     () => simulateIcdPriceVolFilterStrategy(sectorMetricsWindow, lookbackDays, priceVolK),
     [sectorMetricsWindow, lookbackDays, priceVolK]
   );
+  // Regimen de SPY sobre la serie COMPLETA (no la ventana activa) -- la
+  // mediana movil de 252 dias necesita historia previa al inicio de la
+  // ventana para clasificar correctamente los primeros dias de esta.
+  const regimeMap = useMemo(() => {
+    if (!data) return new Map();
+    const spyBars = data.priceBars[BENCHMARK];
+    if (!spyBars) return new Map();
+    return buildMarketRegimeMap(spyBars);
+  }, [data]);
+  const regimeSwitchCurve = useMemo(
+    () => simulateIcdRegimeSwitchStrategy(sectorMetricsWindow, lookbackDays, priceVolK, regimeMap),
+    [sectorMetricsWindow, lookbackDays, priceVolK, regimeMap]
+  );
   const strategyCurve =
-    strategyMethod === 'fixed' ? fixedHoldCurve : strategyMethod === 'icdExit' ? icdExitCurve : priceVolFilterCurve;
+    strategyMethod === 'fixed'
+      ? fixedHoldCurve
+      : strategyMethod === 'icdExit'
+        ? icdExitCurve
+        : strategyMethod === 'priceVolFilter'
+          ? priceVolFilterCurve
+          : regimeSwitchCurve;
   const strategyStats = useMemo(() => computeStrategyStats(strategyCurve), [strategyCurve]);
   // SPY real: dia a dia, TODA la ventana (no recortado a las fechas de
   // trade de la estrategia). Es el buy&hold real -- el "Retorno SPY" y el
@@ -298,6 +319,7 @@ export default function DensityLab() {
                 { key: 'fixed' as const, label: 'M1: tenencia fija' },
                 { key: 'icdExit' as const, label: 'M2: sale si ICD < 0' },
                 { key: 'priceVolFilter' as const, label: 'M3: M2 + filtro vol. precio' },
+                { key: 'regimeSwitch' as const, label: 'M4: portafolio segun regimen SPY' },
               ]).map(({ key, label }) => (
                 <button
                   key={key}
@@ -324,7 +346,7 @@ export default function DensityLab() {
               disabled={strategyMethod !== 'fixed'}
             />
             {strategyMethod !== 'fixed' && (
-              <p className="text-[9px] font-mono text-ink/40">M2/M3 no usan dias de tenencia -- salen por señal (ICD &lt; 0), no por plazo.</p>
+              <p className="text-[9px] font-mono text-ink/40">M2/M3/M4 no usan dias de tenencia -- salen por señal (ICD &lt; 0), no por plazo.</p>
             )}
             <Slider
               label="Estrategia: filtro vol. precio (k)"
@@ -333,12 +355,19 @@ export default function DensityLab() {
               max={1}
               step={0.05}
               onChange={setPriceVolK}
-              disabled={strategyMethod !== 'priceVolFilter'}
+              disabled={strategyMethod !== 'priceVolFilter' && strategyMethod !== 'regimeSwitch'}
             />
             {strategyMethod === 'priceVolFilter' && (
               <p className="text-[9px] font-mono text-ink/40">
                 Solo entra si el retorno de precio del ticker elegido supera k × su propia volatilidad diaria (60d) escalada al lookback.
                 k=0.25 valida como optimo por robustez (grid search offline).
+              </p>
+            )}
+            {strategyMethod === 'regimeSwitch' && (
+              <p className="text-[9px] font-mono text-ink/40">
+                M4: usa el filtro de M3 (con este k) solo cuando la volatilidad realizada de SPY (20d) esta por debajo de su propia
+                mediana movil de ~1 año -- en regimen de alta volatilidad entra sin filtro, como M2. Validado como la metodologia mas
+                robusta en Backtest/Validacion/Live (grid search offline).
               </p>
             )}
           </section>
@@ -586,7 +615,9 @@ export default function DensityLab() {
                           ? `M1: mantener ${holdDays}d`
                           : strategyMethod === 'icdExit'
                             ? 'M2: sale si ICD < 0'
-                            : `M3: M2 + filtro vol. precio (k=${priceVolK})`}
+                            : strategyMethod === 'priceVolFilter'
+                              ? `M3: M2 + filtro vol. precio (k=${priceVolK})`
+                              : `M4: portafolio segun regimen SPY (k=${priceVolK})`}
                       </h3>
                       <EquityCurveChart strategy={strategyCurve} benchmark={spyFullCurve} />
                       {strategyCurve.length >= 2 && (

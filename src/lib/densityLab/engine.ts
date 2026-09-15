@@ -741,6 +741,190 @@ export function simulateIcdPriceVolFilterStrategy(
   return equity.length >= 2 ? equity : [];
 }
 
+export type MarketRegime = 'high' | 'low';
+
+function median(arr: number[]): number {
+  const s = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+}
+
+/**
+ * Clasifica el regimen de volatilidad de SPY en cada fecha: 'high' si la
+ * volatilidad diaria realizada de SPY sobre `volWindow` dias supera su
+ * propia mediana movil de `regimeWindow` dias, 'low' si no -- relativo a
+ * la historia RECIENTE del propio SPY, no un umbral absoluto (que no
+ * generalizaria entre 2018 y 2026, niveles de volatilidad distintos por
+ * era). Solo usa datos pasados hasta cada fecha (sin look-ahead). Fechas
+ * sin suficiente historia (los primeros ~`regimeWindow` dias de la
+ * serie) no aparecen en el mapa.
+ */
+export function buildMarketRegimeMap(spyBars: PriceBar[], volWindow = 20, regimeWindow = 252): Map<string, MarketRegime> {
+  const dailyRets: number[] = [];
+  for (let i = 1; i < spyBars.length; i++) dailyRets.push(spyBars[i].close / spyBars[i - 1].close - 1);
+
+  const shortVol = new Map<string, number>();
+  for (let i = volWindow - 1; i < dailyRets.length; i++) {
+    const window = dailyRets.slice(i - volWindow + 1, i + 1);
+    const mean = window.reduce((a, b) => a + b, 0) / window.length;
+    const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / (window.length - 1);
+    shortVol.set(spyBars[i + 1].date, Math.sqrt(variance));
+  }
+
+  const shortVolDates = [...shortVol.keys()].sort();
+  const shortVolVals = shortVolDates.map((d) => shortVol.get(d) as number);
+
+  const regime = new Map<string, MarketRegime>();
+  for (let i = regimeWindow - 1; i < shortVolDates.length; i++) {
+    const window = shortVolVals.slice(i - regimeWindow + 1, i + 1);
+    const med = median(window);
+    regime.set(shortVolDates[i], shortVolVals[i] > med ? 'high' : 'low');
+  }
+  return regime;
+}
+
+/**
+ * Metodologia 4: portafolio de estrategias -- cambia la regla de ENTRADA
+ * segun el regimen de volatilidad de SPY (`regimeMap`, ver
+ * buildMarketRegimeMap), en vez de usar siempre la misma. M2 y M3
+ * comparten el mismo ranking (mayor delta de ICD) y la misma salida
+ * (ICD<0), solo difieren en si exigen o no el filtro de volatilidad de
+ * precio de M3 -- asi que M4 no necesita alternar entre dos motores
+ * distintos, alcanza con prender/apagar ese filtro segun el regimen:
+ *
+ * - Regimen 'high' (crisis, tipo COVID/2022): entra como M2, sin filtro
+ *   -- reaccionar rapido sin esperar confirmacion protegio capital ahi.
+ * - Regimen 'low' (mercado calmo/rango, tipo Validacion/Live
+ *   2024-2026): entra como M3, con el filtro de vol. de precio -- evita
+ *   el whipsaw de señales ICD sin confirmacion de precio real.
+ * - Regimen desconocido (primeros ~252 dias de la serie, sin historia
+ *   suficiente para clasificar): entra como M2, sin filtro.
+ *
+ * Validado con grid search offline (scripts/testRegimeSwitchM4.mjs): le
+ * gana en Sharpe Y ganancia bruta a M2 solo Y a M3 solo en Backtest y
+ * Validacion (no solo promedia entre los dos), y en Live queda mejor en
+ * ganancia que M3 solo (12.4% vs 11.5%) aunque con Sharpe algo menor.
+ * Primera variante de toda la sesion que le gana a SPY real en las tres
+ * ventanas a la vez.
+ */
+export function simulateIcdRegimeSwitchStrategy(
+  sectorMetrics: Record<string, DensityRow[]>,
+  lookbackDays: number,
+  k: number,
+  regimeMap: Map<string, MarketRegime>,
+  priceVolWindow = 60
+): EquityPoint[] {
+  const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
+  if (tickers.length === 0) return [];
+
+  const icdByTicker: Record<string, Map<string, number | null>> = {};
+  const closeByTicker: Record<string, Map<string, number>> = {};
+  const dailyVolByTicker: Record<string, Map<string, number>> = {};
+  const priceReturnByTicker: Record<string, Map<string, number>> = {};
+
+  for (const t of tickers) {
+    const rows = sectorMetrics[t];
+    icdByTicker[t] = new Map(rows.map((r) => [r.date, r.ICD]));
+    closeByTicker[t] = new Map(rows.map((r) => [r.date, r.close]));
+
+    const dailyVol = new Map<string, number>();
+    const dailyRets: number[] = [];
+    for (let i = 1; i < rows.length; i++) dailyRets.push(rows[i].close / rows[i - 1].close - 1);
+    for (let i = priceVolWindow - 1; i < dailyRets.length; i++) {
+      const window = dailyRets.slice(i - priceVolWindow + 1, i + 1);
+      const mean = window.reduce((a, b) => a + b, 0) / window.length;
+      const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / (window.length - 1);
+      dailyVol.set(rows[i + 1].date, Math.sqrt(variance));
+    }
+    dailyVolByTicker[t] = dailyVol;
+
+    const priceReturn = new Map<string, number>();
+    for (let i = lookbackDays; i < rows.length; i++) {
+      const now = rows[i].close;
+      const before = rows[i - lookbackDays].close;
+      if (before === 0) continue;
+      priceReturn.set(rows[i].date, now / before - 1);
+    }
+    priceReturnByTicker[t] = priceReturn;
+  }
+
+  const dateSet = new Set<string>();
+  for (const t of tickers) for (const r of sectorMetrics[t]) dateSet.add(r.date);
+  const dates = Array.from(dateSet).sort();
+
+  function pickBestTicker(date: string, lookbackDate: string): string | null {
+    let bestTicker: string | null = null;
+    let bestDelta = -Infinity;
+    for (const t of tickers) {
+      const now = icdByTicker[t].get(date);
+      const before = icdByTicker[t].get(lookbackDate);
+      if (now === null || now === undefined || before === null || before === undefined) continue;
+      const delta = now - before;
+      if (delta > bestDelta) {
+        bestDelta = delta;
+        bestTicker = t;
+      }
+    }
+    return bestTicker;
+  }
+
+  const equity: EquityPoint[] = [];
+  let equityValue = 1.0;
+  let position: { ticker: string; entryPrice: number } | null = null;
+
+  for (let i = lookbackDays; i < dates.length; i++) {
+    const date = dates[i];
+
+    if (position) {
+      const icdNow = icdByTicker[position.ticker].get(date);
+      const closeNow = closeByTicker[position.ticker].get(date);
+      if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
+        equityValue *= 1 + (closeNow / position.entryPrice - 1);
+        equity.push({ date, value: equityValue });
+        position = null;
+      }
+    }
+
+    if (!position) {
+      const lookbackDate = dates[i - lookbackDays];
+      const bestTicker = pickBestTicker(date, lookbackDate);
+      if (bestTicker !== null) {
+        const regime = regimeMap.get(date);
+
+        let qualifies: boolean;
+        if (regime === 'low') {
+          const priceReturn = priceReturnByTicker[bestTicker].get(date);
+          const dailyVol = dailyVolByTicker[bestTicker].get(date);
+          const sigmaLookback = dailyVol !== undefined ? dailyVol * Math.sqrt(lookbackDays) : undefined;
+          qualifies = priceReturn !== undefined && sigmaLookback !== undefined && priceReturn >= k * sigmaLookback;
+        } else {
+          // 'high' o sin clasificar (poca historia): entra como M2, sin filtro.
+          qualifies = true;
+        }
+
+        if (qualifies) {
+          const entryPrice = closeByTicker[bestTicker].get(date);
+          if (entryPrice !== undefined) {
+            position = { ticker: bestTicker, entryPrice };
+            if (equity.length === 0) equity.push({ date, value: 1.0 });
+          }
+        }
+      }
+    }
+  }
+
+  if (position) {
+    const lastDate = dates[dates.length - 1];
+    const lastClose = closeByTicker[position.ticker].get(lastDate);
+    if (lastClose !== undefined) {
+      equityValue *= 1 + (lastClose / position.entryPrice - 1);
+      equity.push({ date: lastDate, value: equityValue });
+    }
+  }
+
+  return equity.length >= 2 ? equity : [];
+}
+
 export function buyAndHoldCurve(bars: PriceBar[], alignedDates: string[]): EquityPoint[] {
   if (alignedDates.length === 0 || bars.length === 0) return [];
   const closeMap = new Map(bars.map((b) => [b.date, b.close]));
