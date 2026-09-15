@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Compass, Sun, Moon, RefreshCw, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Compass, Sun, Moon, RefreshCw, AlertTriangle, Download } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -31,6 +31,8 @@ import {
   type SizeAnchor,
   type TickerStaticInfo,
   type DensityRow,
+  type Trade,
+  type MarketRegime,
 } from '@/src/lib/densityLab/engine';
 import PriceIcdChart from '@/src/components/density/PriceIcdChart';
 import Heatmap from '@/src/components/density/Heatmap';
@@ -105,6 +107,7 @@ export default function DensityLab() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const [windowKey, setWindowKey] = useState<WindowKey>('backtest');
   const [rollingWindow, setRollingWindow] = useState(42);
@@ -228,6 +231,116 @@ export default function DensityLab() {
   }, [data, strategyCurve, activeWindow]);
   const benchmarkStats = useMemo(() => computeStrategyStats(benchmarkCurve), [benchmarkCurve]);
 
+  // Trades de la metodologia activa en CADA ventana (no solo la activa en
+  // pantalla) -- para el export a Excel. sectorMetricsFull ya tiene la
+  // serie completa calculada una vez (mismos rollingWindow/freeFloatRatio
+  // que el resto de la UI), solo hace falta cortarla y correr la
+  // estrategia 3 veces.
+  const tradesByWindow = (): Record<WindowKey, Trade[]> => {
+    const result: Record<WindowKey, Trade[]> = { backtest: [], validation: [], live: [] };
+    for (const key of Object.keys(WINDOWS) as WindowKey[]) {
+      const w = WINDOWS[key];
+      const win: Record<string, DensityRow[]> = {};
+      for (const [t, rows] of Object.entries(sectorMetricsFull)) {
+        const sliced = sliceWindow(rows, w.start, w.end);
+        if (sliced.length > 0) win[t] = sliced;
+      }
+      const trades: Trade[] = [];
+      if (strategyMethod === 'fixed') {
+        simulateIcdRotationStrategy(win, lookbackDays, holdDays, trades);
+      } else if (strategyMethod === 'icdExit') {
+        simulateIcdExitStrategy(win, lookbackDays, trades);
+      } else if (strategyMethod === 'priceVolFilter') {
+        simulateIcdPriceVolFilterStrategy(win, lookbackDays, priceVolK, 60, trades);
+      } else {
+        simulateIcdRegimeSwitchStrategy(win, lookbackDays, priceVolK, regimeMap as Map<string, MarketRegime>, 60, trades);
+      }
+      result[key] = trades;
+    }
+    return result;
+  };
+
+  const strategyMethodLabel = () =>
+    strategyMethod === 'fixed'
+      ? `M1 (tenencia fija ${holdDays}d)`
+      : strategyMethod === 'icdExit'
+        ? 'M2 (sale si ICD < 0)'
+        : strategyMethod === 'priceVolFilter'
+          ? `M3 (filtro vol. precio k=${priceVolK})`
+          : `M4 (portafolio segun regimen SPY, k=${priceVolK})`;
+
+  const SHEET_NAMES: Record<WindowKey, string> = { backtest: 'Backtest', validation: 'Validacion', live: 'Live' };
+
+  const handleExportExcel = async () => {
+    if (!data) return;
+    setExporting(true);
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Capital Gravity';
+      workbook.created = new Date();
+
+      const byWindow = tradesByWindow();
+
+      for (const key of Object.keys(WINDOWS) as WindowKey[]) {
+        const sheet = workbook.addWorksheet(SHEET_NAMES[key]);
+        sheet.columns = [
+          { header: 'Ticker', key: 'ticker', width: 10 },
+          { header: 'Sector', key: 'sector', width: 24 },
+          { header: 'Fecha entrada', key: 'entryDate', width: 14 },
+          { header: 'Precio entrada', key: 'entryPrice', width: 14 },
+          { header: 'Fecha salida', key: 'exitDate', width: 14 },
+          { header: 'Precio salida', key: 'exitPrice', width: 14 },
+          { header: 'Retorno %', key: 'returnPct', width: 12 },
+          { header: 'Dias en posicion', key: 'days', width: 16 },
+        ];
+        sheet.getRow(1).font = { bold: true };
+
+        for (const t of byWindow[key]) {
+          const days = Math.round((new Date(t.exitDate).getTime() - new Date(t.entryDate).getTime()) / 86400000);
+          sheet.addRow({
+            ticker: t.ticker,
+            sector: SECTOR_NAMES[t.ticker] ?? t.ticker,
+            entryDate: t.entryDate,
+            entryPrice: Number(t.entryPrice.toFixed(2)),
+            exitDate: t.exitDate,
+            exitPrice: Number(t.exitPrice.toFixed(2)),
+            returnPct: Number(t.returnPct.toFixed(2)),
+            days,
+          });
+        }
+        if (byWindow[key].length === 0) {
+          sheet.addRow(['Sin trades en esta ventana con la metodologia/parametros actuales']);
+        }
+      }
+
+      const infoSheet = workbook.addWorksheet('Info');
+      infoSheet.columns = [
+        { header: 'Parametro', key: 'k', width: 28 },
+        { header: 'Valor', key: 'v', width: 50 },
+      ];
+      infoSheet.getRow(1).font = { bold: true };
+      infoSheet.addRow({ k: 'Metodologia', v: strategyMethodLabel() });
+      infoSheet.addRow({ k: 'Lookback delta ICD (dias)', v: lookbackDays });
+      infoSheet.addRow({ k: 'Media movil ICD (dias)', v: rollingWindow });
+      infoSheet.addRow({ k: 'Universo', v: SECTOR_ETFS.join(', ') });
+      infoSheet.addRow({ k: 'Generado', v: new Date().toISOString() });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `posiciones_${strategyMethod}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const selectedInfo = data?.staticInfos[selectedTicker];
   const selectedSeries = sectorMetricsWindow[selectedTicker] ?? [];
 
@@ -263,6 +376,18 @@ export default function DensityLab() {
           >
             <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
             {loading ? 'Descargando...' : 'Actualizar datos'}
+          </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={!data || exporting}
+            title="Descargar posiciones de la estrategia activa en las 3 ventanas (Backtest/Validacion/Live)"
+            className={cn(
+              'flex items-center gap-2 px-4 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-all',
+              !data || exporting ? 'bg-ink/10 text-ink/40 cursor-not-allowed' : 'bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30'
+            )}
+          >
+            <Download className={cn('w-3 h-3', exporting && 'animate-pulse')} />
+            {exporting ? 'Generando...' : 'Exportar Excel'}
           </button>
           <button
             onClick={() => setDarkMode((d) => !d)}

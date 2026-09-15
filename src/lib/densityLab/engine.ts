@@ -451,10 +451,27 @@ export interface EquityPoint {
   value: number;
 }
 
+/**
+ * Una posicion cerrada (entrada + salida) -- para exportar el detalle de
+ * trades de cualquier metodologia. `outTrades` en cada simulate*Strategy
+ * es un parametro de salida opcional: si se pasa un array, se le
+ * empujan los trades como efecto secundario (no cambia el valor de
+ * retorno, no rompe a los llamadores existentes que no lo usan).
+ */
+export interface Trade {
+  ticker: string;
+  entryDate: string;
+  entryPrice: number;
+  exitDate: string;
+  exitPrice: number;
+  returnPct: number;
+}
+
 export function simulateIcdRotationStrategy(
   sectorMetrics: Record<string, DensityRow[]>,
   lookbackDays: number,
-  holdDays: number
+  holdDays: number,
+  outTrades?: Trade[]
 ): EquityPoint[] {
   const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
   if (tickers.length === 0) return [];
@@ -509,6 +526,14 @@ export function simulateIcdRotationStrategy(
     equityValue *= 1 + tradeReturn;
     if (equity.length === 0) equity.push({ date: rebalanceDate, value: 1.0 });
     equity.push({ date: exitDate, value: equityValue });
+    outTrades?.push({
+      ticker: bestTicker,
+      entryDate: rebalanceDate,
+      entryPrice,
+      exitDate,
+      exitPrice,
+      returnPct: tradeReturn * 100,
+    });
 
     // Avanzar estrictamente DESPUES de la fecha de salida (no re-entrar el
     // mismo dia que se cierra la posicion) -- mismo criterio que la
@@ -534,7 +559,11 @@ export function simulateIcdRotationStrategy(
  *
  * Funcion nueva e independiente -- no toca simulateIcdRotationStrategy.
  */
-export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow[]>, lookbackDays: number): EquityPoint[] {
+export function simulateIcdExitStrategy(
+  sectorMetrics: Record<string, DensityRow[]>,
+  lookbackDays: number,
+  outTrades?: Trade[]
+): EquityPoint[] {
   const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
   if (tickers.length === 0) return [];
 
@@ -567,7 +596,7 @@ export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow
 
   const equity: EquityPoint[] = [];
   let equityValue = 1.0;
-  let position: { ticker: string; entryPrice: number } | null = null;
+  let position: { ticker: string; entryPrice: number; entryDate: string } | null = null;
 
   for (let i = lookbackDays; i < dates.length; i++) {
     const date = dates[i];
@@ -578,6 +607,14 @@ export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow
       if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
         equityValue *= 1 + (closeNow / position.entryPrice - 1);
         equity.push({ date, value: equityValue });
+        outTrades?.push({
+          ticker: position.ticker,
+          entryDate: position.entryDate,
+          entryPrice: position.entryPrice,
+          exitDate: date,
+          exitPrice: closeNow,
+          returnPct: (closeNow / position.entryPrice - 1) * 100,
+        });
         position = null;
       }
     }
@@ -588,7 +625,7 @@ export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow
       if (bestTicker !== null) {
         const entryPrice = closeByTicker[bestTicker].get(date);
         if (entryPrice !== undefined) {
-          position = { ticker: bestTicker, entryPrice };
+          position = { ticker: bestTicker, entryPrice, entryDate: date };
           if (equity.length === 0) equity.push({ date, value: 1.0 });
         }
       }
@@ -604,6 +641,14 @@ export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow
     if (lastClose !== undefined) {
       equityValue *= 1 + (lastClose / position.entryPrice - 1);
       equity.push({ date: lastDate, value: equityValue });
+      outTrades?.push({
+        ticker: position.ticker,
+        entryDate: position.entryDate,
+        entryPrice: position.entryPrice,
+        exitDate: lastDate,
+        exitPrice: lastClose,
+        returnPct: (lastClose / position.entryPrice - 1) * 100,
+      });
     }
   }
 
@@ -637,7 +682,8 @@ export function simulateIcdPriceVolFilterStrategy(
   sectorMetrics: Record<string, DensityRow[]>,
   lookbackDays: number,
   k: number,
-  volWindow = 60
+  volWindow = 60,
+  outTrades?: Trade[]
 ): EquityPoint[] {
   const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
   if (tickers.length === 0) return [];
@@ -695,7 +741,7 @@ export function simulateIcdPriceVolFilterStrategy(
 
   const equity: EquityPoint[] = [];
   let equityValue = 1.0;
-  let position: { ticker: string; entryPrice: number } | null = null;
+  let position: { ticker: string; entryPrice: number; entryDate: string } | null = null;
 
   for (let i = lookbackDays; i < dates.length; i++) {
     const date = dates[i];
@@ -706,6 +752,14 @@ export function simulateIcdPriceVolFilterStrategy(
       if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
         equityValue *= 1 + (closeNow / position.entryPrice - 1);
         equity.push({ date, value: equityValue });
+        outTrades?.push({
+          ticker: position.ticker,
+          entryDate: position.entryDate,
+          entryPrice: position.entryPrice,
+          exitDate: date,
+          exitPrice: closeNow,
+          returnPct: (closeNow / position.entryPrice - 1) * 100,
+        });
         position = null;
       }
     }
@@ -721,7 +775,7 @@ export function simulateIcdPriceVolFilterStrategy(
         if (qualifies) {
           const entryPrice = closeByTicker[bestTicker].get(date);
           if (entryPrice !== undefined) {
-            position = { ticker: bestTicker, entryPrice };
+            position = { ticker: bestTicker, entryPrice, entryDate: date };
             if (equity.length === 0) equity.push({ date, value: 1.0 });
           }
         }
@@ -735,6 +789,14 @@ export function simulateIcdPriceVolFilterStrategy(
     if (lastClose !== undefined) {
       equityValue *= 1 + (lastClose / position.entryPrice - 1);
       equity.push({ date: lastDate, value: equityValue });
+      outTrades?.push({
+        ticker: position.ticker,
+        entryDate: position.entryDate,
+        entryPrice: position.entryPrice,
+        exitDate: lastDate,
+        exitPrice: lastClose,
+        returnPct: (lastClose / position.entryPrice - 1) * 100,
+      });
     }
   }
 
@@ -812,7 +874,8 @@ export function simulateIcdRegimeSwitchStrategy(
   lookbackDays: number,
   k: number,
   regimeMap: Map<string, MarketRegime>,
-  priceVolWindow = 60
+  priceVolWindow = 60,
+  outTrades?: Trade[]
 ): EquityPoint[] {
   const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
   if (tickers.length === 0) return [];
@@ -870,7 +933,7 @@ export function simulateIcdRegimeSwitchStrategy(
 
   const equity: EquityPoint[] = [];
   let equityValue = 1.0;
-  let position: { ticker: string; entryPrice: number } | null = null;
+  let position: { ticker: string; entryPrice: number; entryDate: string } | null = null;
 
   for (let i = lookbackDays; i < dates.length; i++) {
     const date = dates[i];
@@ -881,6 +944,14 @@ export function simulateIcdRegimeSwitchStrategy(
       if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
         equityValue *= 1 + (closeNow / position.entryPrice - 1);
         equity.push({ date, value: equityValue });
+        outTrades?.push({
+          ticker: position.ticker,
+          entryDate: position.entryDate,
+          entryPrice: position.entryPrice,
+          exitDate: date,
+          exitPrice: closeNow,
+          returnPct: (closeNow / position.entryPrice - 1) * 100,
+        });
         position = null;
       }
     }
@@ -905,7 +976,7 @@ export function simulateIcdRegimeSwitchStrategy(
         if (qualifies) {
           const entryPrice = closeByTicker[bestTicker].get(date);
           if (entryPrice !== undefined) {
-            position = { ticker: bestTicker, entryPrice };
+            position = { ticker: bestTicker, entryPrice, entryDate: date };
             if (equity.length === 0) equity.push({ date, value: 1.0 });
           }
         }
@@ -919,6 +990,14 @@ export function simulateIcdRegimeSwitchStrategy(
     if (lastClose !== undefined) {
       equityValue *= 1 + (lastClose / position.entryPrice - 1);
       equity.push({ date: lastDate, value: equityValue });
+      outTrades?.push({
+        ticker: position.ticker,
+        entryDate: position.entryDate,
+        entryPrice: position.entryPrice,
+        exitDate: lastDate,
+        exitPrice: lastClose,
+        returnPct: (lastClose / position.entryPrice - 1) * 100,
+      });
     }
   }
 
