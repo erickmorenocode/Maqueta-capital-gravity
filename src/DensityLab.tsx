@@ -294,13 +294,20 @@ export default function DensityLab() {
           { header: 'Fecha salida', key: 'exitDate', width: 14 },
           { header: 'Precio salida', key: 'exitPrice', width: 14 },
           { header: 'Retorno %', key: 'returnPct', width: 12 },
+          { header: 'Retorno acumulado %', key: 'cumulativePct', width: 18 },
           { header: 'Dias en posicion', key: 'days', width: 16 },
           ...(isRegimeSwitch ? [{ header: 'Metodologia aplicada', key: 'appliedMethod', width: 32 }] : []),
         ];
         sheet.getRow(1).font = { bold: true };
 
+        // Compuesto fila a fila (no suma simple) -- (1+r1)*(1+r2)*...-1. La
+        // ultima fila de esta columna coincide con el "Retorno" que muestra
+        // el dashboard para esta ventana; sumar la columna "Retorno %" a
+        // mano NO da ese numero, los retornos se componen, no se suman.
+        let cumulative = 1;
         for (const t of byWindow[key]) {
           const days = Math.round((new Date(t.exitDate).getTime() - new Date(t.entryDate).getTime()) / 86400000);
+          cumulative *= 1 + t.returnPct / 100;
           sheet.addRow({
             ticker: t.ticker,
             sector: SECTOR_NAMES[t.ticker] ?? t.ticker,
@@ -309,6 +316,7 @@ export default function DensityLab() {
             exitDate: t.exitDate,
             exitPrice: Number(t.exitPrice.toFixed(2)),
             returnPct: Number(t.returnPct.toFixed(2)),
+            cumulativePct: Number(((cumulative - 1) * 100).toFixed(2)),
             days,
             ...(isRegimeSwitch ? { appliedMethod: t.appliedMethod ?? '' } : {}),
           });
