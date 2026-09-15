@@ -20,6 +20,7 @@ import {
   eventStudy,
   simulateIcdRotationStrategy,
   simulateIcdExitStrategy,
+  simulateIcdPriceVolFilterStrategy,
   computeStrategyStats,
   buyAndHoldCurve,
   sectorBuyAndHoldReturns,
@@ -110,7 +111,8 @@ export default function DensityLab() {
   const [heatmapDays, setHeatmapDays] = useState(30);
   const [lookbackDays, setLookbackDays] = useState(9);
   const [holdDays, setHoldDays] = useState(5);
-  const [strategyMethod, setStrategyMethod] = useState<'fixed' | 'icdExit'>('icdExit');
+  const [priceVolK, setPriceVolK] = useState(0.25);
+  const [strategyMethod, setStrategyMethod] = useState<'fixed' | 'icdExit' | 'priceVolFilter'>('priceVolFilter');
   const [selectedTicker, setSelectedTicker] = useState<string>('XLK');
   const [activeTab, setActiveTab] = useState<TabKey>('grafico');
 
@@ -171,7 +173,12 @@ export default function DensityLab() {
     () => simulateIcdExitStrategy(sectorMetricsWindow, lookbackDays),
     [sectorMetricsWindow, lookbackDays]
   );
-  const strategyCurve = strategyMethod === 'fixed' ? fixedHoldCurve : icdExitCurve;
+  const priceVolFilterCurve = useMemo(
+    () => simulateIcdPriceVolFilterStrategy(sectorMetricsWindow, lookbackDays, priceVolK),
+    [sectorMetricsWindow, lookbackDays, priceVolK]
+  );
+  const strategyCurve =
+    strategyMethod === 'fixed' ? fixedHoldCurve : strategyMethod === 'icdExit' ? icdExitCurve : priceVolFilterCurve;
   const strategyStats = useMemo(() => computeStrategyStats(strategyCurve), [strategyCurve]);
   const benchmarkCurve = useMemo(() => {
     if (!data || strategyCurve.length === 0) return [];
@@ -272,6 +279,7 @@ export default function DensityLab() {
               {([
                 { key: 'fixed' as const, label: 'M1: tenencia fija' },
                 { key: 'icdExit' as const, label: 'M2: sale si ICD < 0' },
+                { key: 'priceVolFilter' as const, label: 'M3: M2 + filtro vol. precio' },
               ]).map(({ key, label }) => (
                 <button
                   key={key}
@@ -295,10 +303,25 @@ export default function DensityLab() {
               step={1}
               onChange={setHoldDays}
               suffix="d"
-              disabled={strategyMethod === 'icdExit'}
+              disabled={strategyMethod !== 'fixed'}
             />
-            {strategyMethod === 'icdExit' && (
-              <p className="text-[9px] font-mono text-ink/40">M2 no usa dias de tenencia -- sale por señal (ICD &lt; 0), no por plazo.</p>
+            {strategyMethod !== 'fixed' && (
+              <p className="text-[9px] font-mono text-ink/40">M2/M3 no usan dias de tenencia -- salen por señal (ICD &lt; 0), no por plazo.</p>
+            )}
+            <Slider
+              label="Estrategia: filtro vol. precio (k)"
+              value={priceVolK}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={setPriceVolK}
+              disabled={strategyMethod !== 'priceVolFilter'}
+            />
+            {strategyMethod === 'priceVolFilter' && (
+              <p className="text-[9px] font-mono text-ink/40">
+                Solo entra si el retorno de precio del ticker elegido supera k × su propia volatilidad diaria (60d) escalada al lookback.
+                k=0.25 valida como optimo por robustez (grid search offline).
+              </p>
             )}
           </section>
 
@@ -541,7 +564,11 @@ export default function DensityLab() {
                     <div>
                       <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
                         Estrategia: comprar mayor delta ICD ({lookbackDays}d) —{' '}
-                        {strategyMethod === 'fixed' ? `M1: mantener ${holdDays}d` : 'M2: sale si ICD < 0'}
+                        {strategyMethod === 'fixed'
+                          ? `M1: mantener ${holdDays}d`
+                          : strategyMethod === 'icdExit'
+                            ? 'M2: sale si ICD < 0'
+                            : `M3: M2 + filtro vol. precio (k=${priceVolK})`}
                       </h3>
                       <EquityCurveChart strategy={strategyCurve} benchmark={benchmarkCurve} />
                       {strategyCurve.length >= 2 && (

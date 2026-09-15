@@ -610,6 +610,137 @@ export function simulateIcdExitStrategy(sectorMetrics: Record<string, DensityRow
   return equity.length >= 2 ? equity : [];
 }
 
+/**
+ * Metodologia 3 de la estrategia ICD: mismo ranking que M2 (entra al
+ * ticker de mayor delta de ICD, misma salida por ICD<0), pero exige
+ * ADEMAS que el retorno de PRECIO de ese ticker sobre `lookbackDays`
+ * supere `k` veces su propia volatilidad diaria historica (ventana de
+ * `volWindow` dias) escalada a ese periodo -- confirma que el movimiento
+ * de precio es genuinamente grande PARA ESE activo especifico, no solo
+ * que el ICD lo marco.
+ *
+ * Por que precio y no ICD propio: se probo primero normalizar por la
+ * distribucion historica del delta de ICD de cada ticker (ver
+ * scripts/testPerTickerThresholdM3.mjs) -- no sirvio, porque el ICD ya
+ * es un z-score por construccion (promedio de zVMC/zSTR/zFFT), asi que
+ * su delta sale con media~0 y desvio~1.44 CASI IDENTICO para los 13
+ * tickers -- "el umbral propio" terminaba siendo el mismo umbral fijo
+ * para todos, sin diferenciar nada. La volatilidad de PRECIO si varia
+ * genuinamente entre activos (Energia se mueve mas que Servicios
+ * Publicos en terminos de precio), por eso filtra de verdad.
+ *
+ * Validado con grid search offline (scripts/testPriceVolFilterM3.mjs):
+ * k=0.25 es el optimo por robustez -- el minimo de Sharpe entre
+ * Backtest/Validacion/Live sube de 0.08 (M2 sin filtro) a 1.02.
+ */
+export function simulateIcdPriceVolFilterStrategy(
+  sectorMetrics: Record<string, DensityRow[]>,
+  lookbackDays: number,
+  k: number,
+  volWindow = 60
+): EquityPoint[] {
+  const tickers = Object.keys(sectorMetrics).filter((t) => sectorMetrics[t].some((r) => r.ICD !== null));
+  if (tickers.length === 0) return [];
+
+  const icdByTicker: Record<string, Map<string, number | null>> = {};
+  const closeByTicker: Record<string, Map<string, number>> = {};
+  const dailyVolByTicker: Record<string, Map<string, number>> = {};
+  const priceReturnByTicker: Record<string, Map<string, number>> = {};
+
+  for (const t of tickers) {
+    const rows = sectorMetrics[t];
+    icdByTicker[t] = new Map(rows.map((r) => [r.date, r.ICD]));
+    closeByTicker[t] = new Map(rows.map((r) => [r.date, r.close]));
+
+    const dailyVol = new Map<string, number>();
+    const dailyRets: number[] = [];
+    for (let i = 1; i < rows.length; i++) dailyRets.push(rows[i].close / rows[i - 1].close - 1);
+    for (let i = volWindow - 1; i < dailyRets.length; i++) {
+      const window = dailyRets.slice(i - volWindow + 1, i + 1);
+      const mean = window.reduce((a, b) => a + b, 0) / window.length;
+      const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / (window.length - 1);
+      dailyVol.set(rows[i + 1].date, Math.sqrt(variance));
+    }
+    dailyVolByTicker[t] = dailyVol;
+
+    const priceReturn = new Map<string, number>();
+    for (let i = lookbackDays; i < rows.length; i++) {
+      const now = rows[i].close;
+      const before = rows[i - lookbackDays].close;
+      if (before === 0) continue;
+      priceReturn.set(rows[i].date, now / before - 1);
+    }
+    priceReturnByTicker[t] = priceReturn;
+  }
+
+  const dateSet = new Set<string>();
+  for (const t of tickers) for (const r of sectorMetrics[t]) dateSet.add(r.date);
+  const dates = Array.from(dateSet).sort();
+
+  function pickBestTicker(date: string, lookbackDate: string): string | null {
+    let bestTicker: string | null = null;
+    let bestDelta = -Infinity;
+    for (const t of tickers) {
+      const now = icdByTicker[t].get(date);
+      const before = icdByTicker[t].get(lookbackDate);
+      if (now === null || now === undefined || before === null || before === undefined) continue;
+      const delta = now - before;
+      if (delta > bestDelta) {
+        bestDelta = delta;
+        bestTicker = t;
+      }
+    }
+    return bestTicker;
+  }
+
+  const equity: EquityPoint[] = [];
+  let equityValue = 1.0;
+  let position: { ticker: string; entryPrice: number } | null = null;
+
+  for (let i = lookbackDays; i < dates.length; i++) {
+    const date = dates[i];
+
+    if (position) {
+      const icdNow = icdByTicker[position.ticker].get(date);
+      const closeNow = closeByTicker[position.ticker].get(date);
+      if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
+        equityValue *= 1 + (closeNow / position.entryPrice - 1);
+        equity.push({ date, value: equityValue });
+        position = null;
+      }
+    }
+
+    if (!position) {
+      const lookbackDate = dates[i - lookbackDays];
+      const bestTicker = pickBestTicker(date, lookbackDate);
+      if (bestTicker !== null) {
+        const priceReturn = priceReturnByTicker[bestTicker].get(date);
+        const dailyVol = dailyVolByTicker[bestTicker].get(date);
+        const sigmaLookback = dailyVol !== undefined ? dailyVol * Math.sqrt(lookbackDays) : undefined;
+        const qualifies = priceReturn !== undefined && sigmaLookback !== undefined && priceReturn >= k * sigmaLookback;
+        if (qualifies) {
+          const entryPrice = closeByTicker[bestTicker].get(date);
+          if (entryPrice !== undefined) {
+            position = { ticker: bestTicker, entryPrice };
+            if (equity.length === 0) equity.push({ date, value: 1.0 });
+          }
+        }
+      }
+    }
+  }
+
+  if (position) {
+    const lastDate = dates[dates.length - 1];
+    const lastClose = closeByTicker[position.ticker].get(lastDate);
+    if (lastClose !== undefined) {
+      equityValue *= 1 + (lastClose / position.entryPrice - 1);
+      equity.push({ date: lastDate, value: equityValue });
+    }
+  }
+
+  return equity.length >= 2 ? equity : [];
+}
+
 export function buyAndHoldCurve(bars: PriceBar[], alignedDates: string[]): EquityPoint[] {
   if (alignedDates.length === 0 || bars.length === 0) return [];
   const closeMap = new Map(bars.map((b) => [b.date, b.close]));
