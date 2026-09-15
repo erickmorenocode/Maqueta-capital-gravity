@@ -180,6 +180,24 @@ export default function DensityLab() {
   const strategyCurve =
     strategyMethod === 'fixed' ? fixedHoldCurve : strategyMethod === 'icdExit' ? icdExitCurve : priceVolFilterCurve;
   const strategyStats = useMemo(() => computeStrategyStats(strategyCurve), [strategyCurve]);
+  // SPY real: dia a dia, TODA la ventana (no recortado a las fechas de
+  // trade de la estrategia). Es el buy&hold real -- el "Retorno SPY" y el
+  // "Alpha simple" mostrados en pantalla se calculan sobre esto, no sobre
+  // benchmarkCurve. Si se usara benchmarkCurve ahi, el retorno de SPY
+  // mostrado quedaria recortado al primer trade de la estrategia -- con
+  // M3 (filtro de vol. de precio, mas exigente para entrar) esto llego a
+  // subestimar a SPY en Validacion por 14.7pp (perdia ene-mar 2024 porque
+  // la estrategia recien entro el 28-mar).
+  const spyFullCurve = useMemo(() => {
+    if (!data) return [];
+    const spyBars = data.priceBars[BENCHMARK];
+    if (!spyBars) return [];
+    const spyWindow = spyBars.filter((b) => b.date >= activeWindow.start && (activeWindow.end === null || b.date <= activeWindow.end));
+    return buyAndHoldCurve(spyWindow, spyWindow.map((b) => b.date));
+  }, [data, activeWindow]);
+  // SPY recortado a las fechas de trade de la estrategia -- solo para
+  // Sharpe/PF/R:B de SPY (comparacion de riesgo bajo la MISMA exposicion
+  // temporal que tuvo la estrategia, no el retorno real de SPY).
   const benchmarkCurve = useMemo(() => {
     if (!data || strategyCurve.length === 0) return [];
     const spyBars = data.priceBars[BENCHMARK];
@@ -570,7 +588,7 @@ export default function DensityLab() {
                             ? 'M2: sale si ICD < 0'
                             : `M3: M2 + filtro vol. precio (k=${priceVolK})`}
                       </h3>
-                      <EquityCurveChart strategy={strategyCurve} benchmark={benchmarkCurve} />
+                      <EquityCurveChart strategy={strategyCurve} benchmark={spyFullCurve} />
                       {strategyCurve.length >= 2 && (
                         <div className="mt-4 space-y-4">
                           <div>
@@ -598,16 +616,19 @@ export default function DensityLab() {
                             </p>
                           </div>
 
-                          {benchmarkCurve.length >= 2 && (
+                          {spyFullCurve.length >= 2 && (
                             <div>
                               <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">
-                                SPY Buy &amp; Hold (mismos periodos que la estrategia)
+                                SPY Buy &amp; Hold (ventana completa, dia a dia)
                               </div>
                               <div className="grid grid-cols-4 gap-4">
-                                <StatCard label="Retorno" value={`${((benchmarkCurve[benchmarkCurve.length - 1].value / benchmarkCurve[0].value - 1) * 100).toFixed(1)}%`} />
-                                <StatCard label="Sharpe (anualizado)" value={benchmarkStats.sharpe !== null ? benchmarkStats.sharpe.toFixed(2) : '—'} />
+                                <StatCard label="Retorno" value={`${((spyFullCurve[spyFullCurve.length - 1].value / spyFullCurve[0].value - 1) * 100).toFixed(1)}%`} />
                                 <StatCard
-                                  label="Profit factor"
+                                  label="Sharpe (mismos periodos que estrategia)"
+                                  value={benchmarkStats.sharpe !== null ? benchmarkStats.sharpe.toFixed(2) : '—'}
+                                />
+                                <StatCard
+                                  label="Profit factor (mismos periodos)"
                                   value={
                                     benchmarkStats.profitFactor === null
                                       ? '—'
@@ -617,19 +638,19 @@ export default function DensityLab() {
                                   }
                                 />
                                 <StatCard
-                                  label="Riesgo:Beneficio"
+                                  label="Riesgo:Beneficio (mismos periodos)"
                                   value={benchmarkStats.riskReward !== null ? `1 : ${benchmarkStats.riskReward.toFixed(2)}` : '—'}
                                 />
                               </div>
                             </div>
                           )}
 
-                          {benchmarkCurve.length >= 2 && (
+                          {spyFullCurve.length >= 2 && (
                             <StatCard
-                              label="Alpha simple (retorno estrategia − retorno SPY)"
+                              label="Alpha simple (retorno estrategia − retorno SPY real)"
                               value={`${(
                                 ((strategyCurve[strategyCurve.length - 1].value / strategyCurve[0].value - 1) -
-                                  (benchmarkCurve[benchmarkCurve.length - 1].value / benchmarkCurve[0].value - 1)) *
+                                  (spyFullCurve[spyFullCurve.length - 1].value / spyFullCurve[0].value - 1)) *
                                 100
                               ).toFixed(1)} pp`}
                             />
@@ -637,8 +658,9 @@ export default function DensityLab() {
 
                           <p className="text-[9px] font-mono text-ink/40">
                             Sharpe con Rf=0, anualizado por dias reales entre periodos. Profit factor = ganancia bruta / |perdida bruta|.
-                            Riesgo:Beneficio = perdida promedio : ganancia promedio por periodo. SPY se corta en los mismos periodos
-                            (entrada/salida) que la estrategia, no dia a dia -- compara riesgo/retorno bajo el mismo calendario de trades.
+                            Riesgo:Beneficio = perdida promedio : ganancia promedio por periodo. El Retorno y Alpha de SPY usan la ventana
+                            completa dia a dia (buy&amp;hold real) -- Sharpe/PF/R:B de SPY se calculan recortados a los mismos periodos de
+                            entrada/salida que tuvo la estrategia (comparacion de riesgo bajo la misma exposicion temporal, no el retorno real).
                           </p>
                         </div>
                       )}
