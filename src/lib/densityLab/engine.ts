@@ -465,6 +465,8 @@ export interface Trade {
   exitDate: string;
   exitPrice: number;
   returnPct: number;
+  /** Solo poblado por M4 (simulateIcdRegimeSwitchStrategy): que sub-regla de entrada se aplico en este trade segun el regimen de SPY vigente. Indefinido en M1/M2/M3. */
+  appliedMethod?: string;
 }
 
 export function simulateIcdRotationStrategy(
@@ -933,7 +935,7 @@ export function simulateIcdRegimeSwitchStrategy(
 
   const equity: EquityPoint[] = [];
   let equityValue = 1.0;
-  let position: { ticker: string; entryPrice: number; entryDate: string } | null = null;
+  let position: { ticker: string; entryPrice: number; entryDate: string; appliedMethod: string } | null = null;
 
   for (let i = lookbackDays; i < dates.length; i++) {
     const date = dates[i];
@@ -951,6 +953,7 @@ export function simulateIcdRegimeSwitchStrategy(
           exitDate: date,
           exitPrice: closeNow,
           returnPct: (closeNow / position.entryPrice - 1) * 100,
+          appliedMethod: position.appliedMethod,
         });
         position = null;
       }
@@ -976,7 +979,8 @@ export function simulateIcdRegimeSwitchStrategy(
         if (qualifies) {
           const entryPrice = closeByTicker[bestTicker].get(date);
           if (entryPrice !== undefined) {
-            position = { ticker: bestTicker, entryPrice, entryDate: date };
+            const appliedMethod = regime === 'low' ? 'M3 (baja volatilidad, filtro precio)' : 'M2 (alta volatilidad, sin filtro)';
+            position = { ticker: bestTicker, entryPrice, entryDate: date, appliedMethod };
             if (equity.length === 0) equity.push({ date, value: 1.0 });
           }
         }
@@ -997,6 +1001,7 @@ export function simulateIcdRegimeSwitchStrategy(
         exitDate: lastDate,
         exitPrice: lastClose,
         returnPct: (lastClose / position.entryPrice - 1) * 100,
+        appliedMethod: position.appliedMethod,
       });
     }
   }

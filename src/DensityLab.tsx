@@ -282,6 +282,8 @@ export default function DensityLab() {
 
       const byWindow = tradesByWindow();
 
+      const isRegimeSwitch = strategyMethod === 'regimeSwitch';
+
       for (const key of Object.keys(WINDOWS) as WindowKey[]) {
         const sheet = workbook.addWorksheet(SHEET_NAMES[key]);
         sheet.columns = [
@@ -293,6 +295,7 @@ export default function DensityLab() {
           { header: 'Precio salida', key: 'exitPrice', width: 14 },
           { header: 'Retorno %', key: 'returnPct', width: 12 },
           { header: 'Dias en posicion', key: 'days', width: 16 },
+          ...(isRegimeSwitch ? [{ header: 'Metodologia aplicada', key: 'appliedMethod', width: 32 }] : []),
         ];
         sheet.getRow(1).font = { bold: true };
 
@@ -307,6 +310,7 @@ export default function DensityLab() {
             exitPrice: Number(t.exitPrice.toFixed(2)),
             returnPct: Number(t.returnPct.toFixed(2)),
             days,
+            ...(isRegimeSwitch ? { appliedMethod: t.appliedMethod ?? '' } : {}),
           });
         }
         if (byWindow[key].length === 0) {
