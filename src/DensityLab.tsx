@@ -219,6 +219,11 @@ export default function DensityLab() {
     const spyWindow = spyBars.filter((b) => b.date >= activeWindow.start && (activeWindow.end === null || b.date <= activeWindow.end));
     return buyAndHoldCurve(spyWindow, spyWindow.map((b) => b.date));
   }, [data, activeWindow]);
+  // Max drawdown/Calmar de SPY sobre la ventana REAL (dia a dia), igual
+  // criterio que Retorno/Alpha -- no el recorte a fechas de trade
+  // (benchmarkStats mas abajo), que subestimaria el drawdown real al
+  // saltarse los dias entre trades de la estrategia.
+  const spyFullStats = useMemo(() => computeStrategyStats(spyFullCurve), [spyFullCurve]);
   // SPY recortado a las fechas de trade de la estrategia -- solo para
   // Sharpe/PF/R:B de SPY (comparacion de riesgo bajo la MISMA exposicion
   // temporal que tuvo la estrategia, no el retorno real de SPY).
@@ -761,7 +766,7 @@ export default function DensityLab() {
                         <div className="mt-4 space-y-4">
                           <div>
                             <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">Estrategia ICD</div>
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-6 gap-4">
                               <StatCard label="Retorno" value={`${((strategyCurve[strategyCurve.length - 1].value / strategyCurve[0].value - 1) * 100).toFixed(1)}%`} />
                               <StatCard label="Sharpe (anualizado)" value={strategyStats.sharpe !== null ? strategyStats.sharpe.toFixed(2) : '—'} />
                               <StatCard
@@ -778,6 +783,20 @@ export default function DensityLab() {
                                 label="Riesgo:Beneficio"
                                 value={strategyStats.riskReward !== null ? `1 : ${strategyStats.riskReward.toFixed(2)}` : '—'}
                               />
+                              <StatCard
+                                label="Max Drawdown"
+                                value={strategyStats.maxDrawdownPct !== null ? `-${strategyStats.maxDrawdownPct.toFixed(1)}%` : '—'}
+                              />
+                              <StatCard
+                                label="Calmar Ratio"
+                                value={
+                                  strategyStats.calmarRatio === null
+                                    ? '—'
+                                    : strategyStats.calmarRatio === Infinity
+                                      ? '∞'
+                                      : strategyStats.calmarRatio.toFixed(2)
+                                }
+                              />
                             </div>
                             <p className="text-[9px] font-mono text-ink/40 mt-1.5">
                               {strategyStats.trades} trades ({strategyStats.wins} ganadores / {strategyStats.losses} perdedores)
@@ -789,7 +808,7 @@ export default function DensityLab() {
                               <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">
                                 SPY Buy &amp; Hold (ventana completa, dia a dia)
                               </div>
-                              <div className="grid grid-cols-4 gap-4">
+                              <div className="grid grid-cols-6 gap-4">
                                 <StatCard label="Retorno" value={`${((spyFullCurve[spyFullCurve.length - 1].value / spyFullCurve[0].value - 1) * 100).toFixed(1)}%`} />
                                 <StatCard
                                   label="Sharpe (mismos periodos que estrategia)"
@@ -809,6 +828,20 @@ export default function DensityLab() {
                                   label="Riesgo:Beneficio (mismos periodos)"
                                   value={benchmarkStats.riskReward !== null ? `1 : ${benchmarkStats.riskReward.toFixed(2)}` : '—'}
                                 />
+                                <StatCard
+                                  label="Max Drawdown (ventana real)"
+                                  value={spyFullStats.maxDrawdownPct !== null ? `-${spyFullStats.maxDrawdownPct.toFixed(1)}%` : '—'}
+                                />
+                                <StatCard
+                                  label="Calmar Ratio (ventana real)"
+                                  value={
+                                    spyFullStats.calmarRatio === null
+                                      ? '—'
+                                      : spyFullStats.calmarRatio === Infinity
+                                        ? '∞'
+                                        : spyFullStats.calmarRatio.toFixed(2)
+                                  }
+                                />
                               </div>
                             </div>
                           )}
@@ -826,9 +859,12 @@ export default function DensityLab() {
 
                           <p className="text-[9px] font-mono text-ink/40">
                             Sharpe con Rf=0, anualizado por dias reales entre periodos. Profit factor = ganancia bruta / |perdida bruta|.
-                            Riesgo:Beneficio = perdida promedio : ganancia promedio por periodo. El Retorno y Alpha de SPY usan la ventana
-                            completa dia a dia (buy&amp;hold real) -- Sharpe/PF/R:B de SPY se calculan recortados a los mismos periodos de
-                            entrada/salida que tuvo la estrategia (comparacion de riesgo bajo la misma exposicion temporal, no el retorno real).
+                            Riesgo:Beneficio = perdida promedio : ganancia promedio por periodo. Max Drawdown = peor caida pico-a-valle de la curva
+                            de equity (magnitud, 0-100%). Calmar Ratio = CAGR / Max Drawdown, retorno anualizado por unidad de peor caida soportada
+                            (a diferencia del Sharpe, no penaliza toda la volatilidad, solo la peor racha perdedora -- estandar en CTAs/managed
+                            futures). El Retorno, Alpha, Max Drawdown y Calmar de SPY usan la ventana completa dia a dia (buy&amp;hold real) --
+                            Sharpe/PF/R:B de SPY se calculan recortados a los mismos periodos de entrada/salida que tuvo la estrategia (comparacion
+                            de riesgo bajo la misma exposicion temporal, no el retorno real).
                           </p>
                         </div>
                       )}

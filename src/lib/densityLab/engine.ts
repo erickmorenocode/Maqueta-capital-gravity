@@ -1042,6 +1042,8 @@ export interface StrategyStats {
   sharpe: number | null;
   profitFactor: number | null; // ganancia bruta / |perdida bruta|. null si no hay perdidas Y no hay ganancias (sin trades utiles)
   riskReward: number | null; // ganancia promedio por trade ganador / |perdida promedio por trade perdedor|
+  maxDrawdownPct: number | null; // 0-100, magnitud de la peor caida pico-a-valle de la curva (siempre positivo)
+  calmarRatio: number | null; // CAGR / maxDrawdown -- retorno anualizado por unidad de peor caida soportada
 }
 
 /**
@@ -1058,10 +1060,21 @@ export interface StrategyStats {
  *
  * Profit Factor: `Infinity` si hubo ganancias y CERO perdidas (caso
  * real, no bug) -- la UI lo debe mostrar como "∞", no como error.
+ *
+ * Calmar Ratio: CAGR (retorno anualizado, compuesto sobre TODO el periodo
+ * de la curva -- no el promedio de retornos por trade que usa Sharpe)
+ * dividido por el maximo drawdown (la peor caida pico-a-valle de la curva
+ * de equity completa, no solo entre trades individuales). A diferencia
+ * de Sharpe (penaliza toda la volatilidad por igual, subidas y bajadas),
+ * Calmar solo mira que tan profundo fue el peor momento real -- estandar
+ * en managed futures/CTAs para medir "cuanto retorno por unidad de dolor
+ * maximo soportado". `Infinity` si nunca hubo drawdown y el CAGR es
+ * positivo (caso real, no bug).
  */
 export function computeStrategyStats(curve: EquityPoint[]): StrategyStats {
   const trades = curve.length >= 2 ? curve.length - 1 : 0;
-  if (trades === 0) return { trades: 0, wins: 0, losses: 0, sharpe: null, profitFactor: null, riskReward: null };
+  if (trades === 0)
+    return { trades: 0, wins: 0, losses: 0, sharpe: null, profitFactor: null, riskReward: null, maxDrawdownPct: null, calmarRatio: null };
 
   const returns: number[] = [];
   for (let i = 1; i < curve.length; i++) returns.push(curve[i].value / curve[i - 1].value - 1);
@@ -1092,5 +1105,30 @@ export function computeStrategyStats(curve: EquityPoint[]): StrategyStats {
     }
   }
 
-  return { trades, wins: winReturns.length, losses: lossReturns.length, sharpe, profitFactor, riskReward };
+  // Max drawdown: sobre la curva de equity COMPLETA (cada punto, no solo
+  // los retornos por trade que usa Sharpe) -- la peor caida desde
+  // cualquier pico previo hasta cualquier valle posterior.
+  let peak = curve[0].value;
+  let maxDrawdown = 0; // fraccion 0-1
+  for (const p of curve) {
+    if (p.value > peak) peak = p.value;
+    const dd = peak > 0 ? (peak - p.value) / peak : 0;
+    if (dd > maxDrawdown) maxDrawdown = dd;
+  }
+  const maxDrawdownPct = maxDrawdown * 100;
+
+  const totalCalendarDays = (new Date(curve[curve.length - 1].date).getTime() - new Date(curve[0].date).getTime()) / 86400000;
+  const years = totalCalendarDays / 365;
+  let calmarRatio: number | null = null;
+  if (years > 0) {
+    const totalReturn = curve[curve.length - 1].value / curve[0].value;
+    const cagr = Math.pow(totalReturn, 1 / years) - 1;
+    if (maxDrawdown > 0) {
+      calmarRatio = cagr / maxDrawdown;
+    } else if (cagr > 0) {
+      calmarRatio = Infinity;
+    }
+  }
+
+  return { trades, wins: winReturns.length, losses: lossReturns.length, sharpe, profitFactor, riskReward, maxDrawdownPct, calmarRatio };
 }
