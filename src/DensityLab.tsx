@@ -236,6 +236,50 @@ export default function DensityLab() {
   }, [data, strategyCurve, activeWindow]);
   const benchmarkStats = useMemo(() => computeStrategyStats(benchmarkCurve), [benchmarkCurve]);
 
+  // Calmar de la metodologia activa en CADA ventana (no solo la ventana en
+  // pantalla) -- para el chequeo de robustez/degradacion: si el Calmar cae
+  // mucho de Backtest a Validacion/Live, la estrategia esta sobreajustada
+  // al backtest y no es confiable en tiempo real.
+  const calmarByWindow = useMemo<Record<WindowKey, number | null>>(() => {
+    const result: Record<WindowKey, number | null> = { backtest: null, validation: null, live: null };
+    for (const key of Object.keys(WINDOWS) as WindowKey[]) {
+      const w = WINDOWS[key];
+      const win: Record<string, DensityRow[]> = {};
+      for (const [t, rows] of Object.entries(sectorMetricsFull)) {
+        const sliced = sliceWindow(rows, w.start, w.end);
+        if (sliced.length > 0) win[t] = sliced;
+      }
+      let curve;
+      if (strategyMethod === 'fixed') {
+        curve = simulateIcdRotationStrategy(win, lookbackDays, holdDays);
+      } else if (strategyMethod === 'icdExit') {
+        curve = simulateIcdExitStrategy(win, lookbackDays);
+      } else if (strategyMethod === 'priceVolFilter') {
+        curve = simulateIcdPriceVolFilterStrategy(win, lookbackDays, priceVolK);
+      } else {
+        curve = simulateIcdRegimeSwitchStrategy(win, lookbackDays, priceVolK, regimeMap as Map<string, MarketRegime>);
+      }
+      result[key] = computeStrategyStats(curve).calmarRatio;
+    }
+    return result;
+  }, [sectorMetricsFull, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap]);
+
+  // Robustez = minimo Calmar entre ventanas / maximo Calmar entre ventanas.
+  // Umbral 80%: si la peor ventana no llega al 80% del Calmar de la mejor
+  // ventana, se marca como degradada (posible sobreajuste al backtest).
+  // Solo se consideran valores finitos (Infinity = drawdown cero, no
+  // comparable con las demas ventanas por division).
+  const calmarRobustness = useMemo(() => {
+    const finite = (Object.values(calmarByWindow) as (number | null)[]).filter(
+      (v): v is number => v !== null && Number.isFinite(v)
+    );
+    if (finite.length < 2) return null;
+    const max = Math.max(...finite);
+    const min = Math.min(...finite);
+    const ratio = max > 0 ? min / max : null;
+    return { min, max, ratio, isRobust: ratio !== null && ratio >= 0.8 };
+  }, [calmarByWindow]);
+
   // Trades de la metodologia activa en CADA ventana (no solo la activa en
   // pantalla) -- para el export a Excel. sectorMetricsFull ya tiene la
   // serie completa calculada una vez (mismos rollingWindow/freeFloatRatio
@@ -803,6 +847,50 @@ export default function DensityLab() {
                             </p>
                           </div>
 
+                          {calmarRobustness && (
+                            <div>
+                              <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">
+                                Robustez Calmar (metodologia {strategyMethodLabel()}, min/max entre ventanas)
+                              </div>
+                              <div className="grid grid-cols-4 gap-4">
+                                <StatCard
+                                  label="Backtest"
+                                  value={
+                                    calmarByWindow.backtest === null
+                                      ? '—'
+                                      : calmarByWindow.backtest === Infinity
+                                        ? '∞'
+                                        : calmarByWindow.backtest.toFixed(2)
+                                  }
+                                />
+                                <StatCard
+                                  label="Validacion"
+                                  value={
+                                    calmarByWindow.validation === null
+                                      ? '—'
+                                      : calmarByWindow.validation === Infinity
+                                        ? '∞'
+                                        : calmarByWindow.validation.toFixed(2)
+                                  }
+                                />
+                                <StatCard
+                                  label="Live"
+                                  value={calmarByWindow.live === null ? '—' : calmarByWindow.live === Infinity ? '∞' : calmarByWindow.live.toFixed(2)}
+                                />
+                                <StatCard
+                                  label={calmarRobustness.isRobust ? 'Robusta (min >= 80% max)' : 'Degradada (min < 80% max)'}
+                                  value={calmarRobustness.ratio !== null ? `${(calmarRobustness.ratio * 100).toFixed(0)}%` : '—'}
+                                  tone={calmarRobustness.isRobust ? 'good' : 'bad'}
+                                />
+                              </div>
+                              <p className="text-[9px] font-mono text-ink/40 mt-1.5">
+                                Calmar minimo entre las 3 ventanas / Calmar maximo entre las 3 ventanas, para la metodologia activa. Umbral 80%: si la
+                                peor ventana no llega al 80% del Calmar de la mejor ventana, la estrategia se considera degradada (posible sobreajuste
+                                al backtest). Ventanas con Calmar infinito (drawdown cero) se excluyen del calculo por no ser comparables.
+                              </p>
+                            </div>
+                          )}
+
                           {spyFullCurve.length >= 2 && (
                             <div>
                               <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">
@@ -880,11 +968,12 @@ export default function DensityLab() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, tone = 'accent' }: { label: string; value: string; tone?: 'accent' | 'good' | 'bad' }) {
+  const toneClass = tone === 'good' ? 'text-emerald-500' : tone === 'bad' ? 'text-red-500' : 'text-accent';
   return (
     <div className="border border-border rounded p-3 text-center">
       <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40">{label}</div>
-      <div className="text-lg font-bold text-accent mt-1">{value}</div>
+      <div className={cn('text-lg font-bold mt-1', toneClass)}>{value}</div>
     </div>
   );
 }
