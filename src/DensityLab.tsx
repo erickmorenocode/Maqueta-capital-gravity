@@ -319,7 +319,14 @@ export default function DensityLab() {
   // color propio, para que se distingan Backtest/Validacion/Live sin
   // cortar el grafico en 3.
   const combinedStrategySegments = useMemo(() => {
-    const segments: { key: WindowKey; label: string; color: string; points: EquityPoint[] }[] = [];
+    const segments: {
+      key: WindowKey;
+      label: string;
+      color: string;
+      points: EquityPoint[];
+      leadingFlat: boolean;
+      trailingFlat: boolean;
+    }[] = [];
     let carry = 1;
     for (const key of WINDOW_ORDER) {
       const w = WINDOWS[key];
@@ -338,12 +345,22 @@ export default function DensityLab() {
       // reentrada) -- sin estas anclas el tramo no llega a los bordes de su
       // ventana y se ve un corte/hueco en vez de linea continua con el
       // tramo vecino. El valor es plano (sin posicion abierta = equity no
-      // cambia) hasta el primer trade y desde el ultimo.
-      if (points[0].date > w.start) points.unshift({ date: w.start, value: points[0].value });
+      // cambia) hasta el primer trade y desde el ultimo -- se marcan como
+      // leadingFlat/trailingFlat para que el grafico las dibuje mas tenues
+      // y no se confundan con tramos donde la estrategia si opero.
+      let leadingFlat = false;
+      let trailingFlat = false;
+      if (points[0].date > w.start) {
+        points.unshift({ date: w.start, value: points[0].value });
+        leadingFlat = true;
+      }
       const windowEnd = w.end ?? points[points.length - 1].date;
-      if (points[points.length - 1].date < windowEnd) points.push({ date: windowEnd, value: points[points.length - 1].value });
+      if (points[points.length - 1].date < windowEnd) {
+        points.push({ date: windowEnd, value: points[points.length - 1].value });
+        trailingFlat = true;
+      }
       carry = points[points.length - 1].value;
-      segments.push({ key, label: WINDOWS[key].label, color: WINDOW_COLORS[key], points });
+      segments.push({ key, label: WINDOWS[key].label, color: WINDOW_COLORS[key], points, leadingFlat, trailingFlat });
     }
     return segments;
   }, [sectorMetricsFull, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap]);

@@ -9,6 +9,10 @@ export interface EquitySegment {
   label: string;
   color: string;
   points: EquityPoint[];
+  /** true si points[0] es un ancla sintetica (sin posicion abierta todavia) -- se dibuja mas tenue. */
+  leadingFlat?: boolean;
+  /** true si el ultimo punto es un ancla sintetica (ya sin posicion abierta) -- se dibuja mas tenue. */
+  trailingFlat?: boolean;
 }
 
 interface Props {
@@ -52,7 +56,21 @@ export default function EquityCurveChart({ segments, benchmark, boundaries = [],
       .filter((d) => d >= domainStart && d <= domainEnd)
       .map((d) => xScale(d));
 
-    const segmentPaths = segments.map((s) => ({ ...s, path: line(s.points) ?? '' }));
+    // Cada segmento puede traer un tramo plano sintetico al inicio y/o al
+    // final (sin posicion abierta -- ver combinedStrategySegments). Se
+    // separan en su propio sub-path para dibujarlos mas tenues y que no se
+    // confundan con los tramos donde la estrategia si tuvo trades.
+    const segmentPaths = segments.map((s) => {
+      const n = s.points.length;
+      const mainStart = s.leadingFlat ? 1 : 0;
+      const mainEnd = s.trailingFlat ? n - 1 : n;
+      return {
+        ...s,
+        path: line(s.points.slice(mainStart, mainEnd)) ?? '',
+        leadingFlatPath: s.leadingFlat ? line(s.points.slice(0, 2)) ?? '' : '',
+        trailingFlatPath: s.trailingFlat ? line(s.points.slice(n - 2, n)) ?? '' : '',
+      };
+    });
 
     // Zonas clickeables de fondo, una por ventana -- se dividen en los
     // mismos cortes que las lineas de boundary para que el area clickeable
@@ -143,17 +161,20 @@ export default function EquityCurveChart({ segments, benchmark, boundaries = [],
             <path d={benchmarkPath} fill="none" stroke="#64748b" strokeDasharray="4,3" strokeWidth={1.4} style={{ pointerEvents: 'none' }} />
           )}
 
-          {segmentPaths.map((s) => (
-            <path
-              key={s.key}
-              d={s.path}
-              fill="none"
-              stroke={s.color}
-              strokeWidth={selectedWindow === s.key ? 2.6 : 1.8}
-              opacity={!selectedWindow || selectedWindow === s.key ? 1 : 0.5}
-              style={{ pointerEvents: 'none' }}
-            />
-          ))}
+          {segmentPaths.map((s) => {
+            const dimmed = !selectedWindow || selectedWindow === s.key ? 1 : 0.5;
+            return (
+              <g key={s.key} style={{ pointerEvents: 'none' }}>
+                {s.leadingFlatPath && (
+                  <path d={s.leadingFlatPath} fill="none" stroke={s.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.35 * dimmed} />
+                )}
+                <path d={s.path} fill="none" stroke={s.color} strokeWidth={selectedWindow === s.key ? 2.6 : 1.8} opacity={dimmed} />
+                {s.trailingFlatPath && (
+                  <path d={s.trailingFlatPath} fill="none" stroke={s.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.35 * dimmed} />
+                )}
+              </g>
+            );
+          })}
         </g>
       </svg>
       <div className="flex flex-wrap items-center gap-2 text-[9px] font-mono text-ink/60 mt-1">
