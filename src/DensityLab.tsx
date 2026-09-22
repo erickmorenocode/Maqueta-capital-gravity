@@ -681,6 +681,50 @@ export default function DensityLab() {
                       </p>
                     )}
                     <PriceIcdChart data={selectedSeries} ticker={selectedTicker} zThreshold={zThreshold} />
+
+                    <div>
+                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
+                        Estudio de eventos: ICD z-score &gt; {zThreshold}
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[10px] font-mono">
+                          <thead>
+                            <tr className="text-ink/50 border-b border-border">
+                              <th className="text-left py-2 px-2">Sector</th>
+                              <th className="text-right py-2 px-2">N eventos</th>
+                              {corrMatrix.lags.map((l) => (
+                                <th key={l} className="text-right py-2 px-2">
+                                  Post {l}d / Base {l}d
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {events.map((ev) => (
+                              <tr key={ev.ticker} className="border-b border-border/40">
+                                <td className="py-2 px-2">
+                                  {ev.sector} <span className="text-ink/40">({ev.ticker})</span>
+                                </td>
+                                <td className="text-right py-2 px-2">{ev.nEvents}</td>
+                                {corrMatrix.lags.map((l) => {
+                                  const cell = ev.byLag[l];
+                                  return (
+                                    <td key={l} className="text-right py-2 px-2">
+                                      {cell?.postEventMean !== null && cell?.postEventMean !== undefined ? `${(cell.postEventMean * 100).toFixed(2)}%` : '—'}
+                                      {' / '}
+                                      {cell?.baseMean !== null && cell?.baseMean !== undefined ? `${(cell.baseMean * 100).toFixed(2)}%` : '—'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-[9px] font-mono text-ink/40 mt-2">
+                        Compara el retorno futuro promedio despues de un evento de anomalia (Post) contra el retorno promedio incondicional (Base).
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -950,50 +994,6 @@ export default function DensityLab() {
                           <p className="text-[11px] font-mono text-ink/40 py-8 text-center">Sin datos en esta ventana.</p>
                         )}
                       </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
-                        Estudio de eventos: ICD z-score &gt; {zThreshold}
-                      </h3>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[10px] font-mono">
-                          <thead>
-                            <tr className="text-ink/50 border-b border-border">
-                              <th className="text-left py-2 px-2">Sector</th>
-                              <th className="text-right py-2 px-2">N eventos</th>
-                              {corrMatrix.lags.map((l) => (
-                                <th key={l} className="text-right py-2 px-2">
-                                  Post {l}d / Base {l}d
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {events.map((ev) => (
-                              <tr key={ev.ticker} className="border-b border-border/40">
-                                <td className="py-2 px-2">
-                                  {ev.sector} <span className="text-ink/40">({ev.ticker})</span>
-                                </td>
-                                <td className="text-right py-2 px-2">{ev.nEvents}</td>
-                                {corrMatrix.lags.map((l) => {
-                                  const cell = ev.byLag[l];
-                                  return (
-                                    <td key={l} className="text-right py-2 px-2">
-                                      {cell?.postEventMean !== null && cell?.postEventMean !== undefined ? `${(cell.postEventMean * 100).toFixed(2)}%` : '—'}
-                                      {' / '}
-                                      {cell?.baseMean !== null && cell?.baseMean !== undefined ? `${(cell.baseMean * 100).toFixed(2)}%` : '—'}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-[9px] font-mono text-ink/40 mt-2">
-                        Compara el retorno futuro promedio despues de un evento de anomalia (Post) contra el retorno promedio incondicional (Base).
-                      </p>
                     </div>
                   </div>
                 )}
