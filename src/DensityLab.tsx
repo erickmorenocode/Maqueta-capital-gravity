@@ -12,6 +12,8 @@ import {
   BENCHMARK,
   DEFAULT_FREE_FLOAT_RATIO,
   WINDOWS,
+  VALIDATION_START,
+  LIVE_START,
   computeAllSectorsDensity,
   sliceWindow,
   buildRotationMatrix,
@@ -33,6 +35,7 @@ import {
   type DensityRow,
   type Trade,
   type MarketRegime,
+  type EquityPoint,
 } from '@/src/lib/densityLab/engine';
 import PriceIcdChart from '@/src/components/density/PriceIcdChart';
 import Heatmap from '@/src/components/density/Heatmap';
@@ -41,6 +44,43 @@ import EquityCurveChart from '@/src/components/density/EquityCurveChart';
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+type StrategyMethod = 'fixed' | 'icdExit' | 'priceVolFilter' | 'regimeSwitch';
+
+// Corre la metodologia activa sobre un recorte de sectorMetrics (una
+// ventana). Extraido para no repetir el switch en calmarByWindow,
+// tradesByWindow y el panel consolidado de equity (3 ventanas).
+function runStrategyCurve(
+  win: Record<string, DensityRow[]>,
+  method: StrategyMethod,
+  lookbackDays: number,
+  holdDays: number,
+  priceVolK: number,
+  regimeMap: Map<string, MarketRegime>,
+  outTrades?: Trade[]
+): EquityPoint[] {
+  if (method === 'fixed') return simulateIcdRotationStrategy(win, lookbackDays, holdDays, outTrades);
+  if (method === 'icdExit') return simulateIcdExitStrategy(win, lookbackDays, outTrades);
+  if (method === 'priceVolFilter') return simulateIcdPriceVolFilterStrategy(win, lookbackDays, priceVolK, 60, outTrades);
+  return simulateIcdRegimeSwitchStrategy(win, lookbackDays, priceVolK, regimeMap, 60, outTrades);
+}
+
+const WINDOW_ORDER: WindowKey[] = ['backtest', 'validation', 'live'];
+
+// Colores por ventana para el panel consolidado -- distinguen visualmente
+// que tramo de la curva de equity corresponde a Backtest/Validacion/Live.
+const WINDOW_COLORS: Record<WindowKey, string> = {
+  backtest: '#f97316',
+  validation: '#3b82f6',
+  live: '#10b981',
+};
+
+// Fechas de corte entre ventanas, para las lineas verticales entrecortadas
+// del panel consolidado.
+const WINDOW_BOUNDARIES: { date: string; label: string }[] = [
+  { date: VALIDATION_START, label: WINDOWS.validation.label },
+  { date: LIVE_START, label: WINDOWS.live.label },
+];
 
 interface ApiResponse {
   asOf: string;
@@ -249,16 +289,7 @@ export default function DensityLab() {
         const sliced = sliceWindow(rows, w.start, w.end);
         if (sliced.length > 0) win[t] = sliced;
       }
-      let curve;
-      if (strategyMethod === 'fixed') {
-        curve = simulateIcdRotationStrategy(win, lookbackDays, holdDays);
-      } else if (strategyMethod === 'icdExit') {
-        curve = simulateIcdExitStrategy(win, lookbackDays);
-      } else if (strategyMethod === 'priceVolFilter') {
-        curve = simulateIcdPriceVolFilterStrategy(win, lookbackDays, priceVolK);
-      } else {
-        curve = simulateIcdRegimeSwitchStrategy(win, lookbackDays, priceVolK, regimeMap as Map<string, MarketRegime>);
-      }
+      const curve = runStrategyCurve(win, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>);
       result[key] = computeStrategyStats(curve).calmarRatio;
     }
     return result;
@@ -280,6 +311,43 @@ export default function DensityLab() {
     return { min, max, ratio, isRobust: ratio !== null && ratio >= 0.8 };
   }, [calmarByWindow]);
 
+  // Panel consolidado: encadena la curva de equity de la metodologia activa
+  // en las 3 ventanas (cada simulate*Strategy resetea a 1.0 al inicio de
+  // su propia ventana) multiplicando por el valor acumulado de la ventana
+  // anterior -- asi la curva es continua 2018-presente en vez de 3 curvas
+  // separadas que reinician en 1.0. Un tramo (segment) por ventana, con
+  // color propio, para que se distingan Backtest/Validacion/Live sin
+  // cortar el grafico en 3.
+  const combinedStrategySegments = useMemo(() => {
+    const segments: { key: WindowKey; label: string; color: string; points: EquityPoint[] }[] = [];
+    let carry = 1;
+    for (const key of WINDOW_ORDER) {
+      const w = WINDOWS[key];
+      const win: Record<string, DensityRow[]> = {};
+      for (const [t, rows] of Object.entries(sectorMetricsFull)) {
+        const sliced = sliceWindow(rows, w.start, w.end);
+        if (sliced.length > 0) win[t] = sliced;
+      }
+      const curve = runStrategyCurve(win, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>);
+      if (curve.length === 0) continue;
+      const base = curve[0].value;
+      const points = curve.map((p) => ({ date: p.date, value: (p.value / base) * carry }));
+      carry = points[points.length - 1].value;
+      segments.push({ key, label: WINDOWS[key].label, color: WINDOW_COLORS[key], points });
+    }
+    return segments;
+  }, [sectorMetricsFull, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap]);
+
+  // SPY buy&hold continuo 2018-presente (sin cortar por ventana) -- sirve
+  // de referencia unica para todo el panel consolidado.
+  const combinedBenchmarkCurve = useMemo(() => {
+    if (!data) return [];
+    const spyBars = data.priceBars[BENCHMARK];
+    if (!spyBars) return [];
+    const spyFull = spyBars.filter((b) => b.date >= WINDOWS.backtest.start);
+    return buyAndHoldCurve(spyFull, spyFull.map((b) => b.date));
+  }, [data]);
+
   // Trades de la metodologia activa en CADA ventana (no solo la activa en
   // pantalla) -- para el export a Excel. sectorMetricsFull ya tiene la
   // serie completa calculada una vez (mismos rollingWindow/freeFloatRatio
@@ -295,15 +363,7 @@ export default function DensityLab() {
         if (sliced.length > 0) win[t] = sliced;
       }
       const trades: Trade[] = [];
-      if (strategyMethod === 'fixed') {
-        simulateIcdRotationStrategy(win, lookbackDays, holdDays, trades);
-      } else if (strategyMethod === 'icdExit') {
-        simulateIcdExitStrategy(win, lookbackDays, trades);
-      } else if (strategyMethod === 'priceVolFilter') {
-        simulateIcdPriceVolFilterStrategy(win, lookbackDays, priceVolK, 60, trades);
-      } else {
-        simulateIcdRegimeSwitchStrategy(win, lookbackDays, priceVolK, regimeMap as Map<string, MarketRegime>, 60, trades);
-      }
+      runStrategyCurve(win, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>, trades);
       result[key] = trades;
     }
     return result;
@@ -462,24 +522,6 @@ export default function DensityLab() {
       <main className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1600px] mx-auto">
         {/* Sidebar */}
         <aside className="lg:col-span-3 space-y-5">
-          <section className="glass rounded-lg p-4 space-y-3">
-            <h2 className="text-[10px] font-mono uppercase tracking-widest text-ink/50">Ventana temporal</h2>
-            <div className="space-y-1.5">
-              {(Object.keys(WINDOWS) as WindowKey[]).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => setWindowKey(key)}
-                  className={cn(
-                    'w-full text-left px-3 py-2 rounded text-[11px] font-mono border transition-all',
-                    windowKey === key ? 'bg-accent/15 border-accent/40 text-accent' : 'border-border text-ink/60 hover:border-accent/20'
-                  )}
-                >
-                  {WINDOWS[key].label}
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="glass rounded-lg p-4 space-y-4">
             <h2 className="text-[10px] font-mono uppercase tracking-widest text-ink/50">Parametros del modelo</h2>
             <Slider label="Media movil (dias)" value={rollingWindow} min={5} max={60} step={1} onChange={setRollingWindow} suffix="d" />
@@ -695,107 +737,6 @@ export default function DensityLab() {
                   <div className="space-y-8">
                     <div>
                       <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
-                        Correlacion rezagada: ICD (t) vs retorno futuro
-                      </h3>
-                      <Heatmap
-                        rowLabels={corrMatrix.sectors}
-                        colLabels={corrMatrix.lags.map((l) => `${l}d`)}
-                        values={corrMatrix.values}
-                        scaleType="diverging"
-                        legendLabel="Correlacion (r)"
-                      />
-                      <p className="text-[9px] font-mono text-ink/40 mt-2">
-                        r &gt; 0: picos de ICD tienden a preceder subidas de precio. r &lt; 0: tienden a preceder bajadas.
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
-                        Retorno real por sector en esta ventana (Buy &amp; Hold)
-                      </h3>
-                      <p className="text-[9px] font-mono text-ink/40 mb-3">
-                        Cuanto se hubiera ganado o perdido invirtiendo en cada sector el primer dia de la ventana
-                        activa ({activeWindow.start}) y manteniendo hasta {activeWindow.end ?? 'hoy'} — sin rotar,
-                        sin ICD, solo el precio del ETF.
-                      </p>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[11px] font-mono">
-                          <thead>
-                            <tr className="text-ink/50 border-b border-border">
-                              <th className="text-left py-2 px-2">Sector</th>
-                              <th className="text-right py-2 px-2">Inicio ({sectorReturns[0]?.startDate ?? '—'})</th>
-                              <th className="text-right py-2 px-2">Fin ({sectorReturns[0]?.endDate ?? '—'})</th>
-                              <th className="text-right py-2 px-2">Retorno</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {sectorReturns.map((r) => (
-                              <tr key={r.ticker} className="border-b border-border/40">
-                                <td className="py-2 px-2">
-                                  {r.sector} <span className="text-ink/40">({r.ticker})</span>
-                                </td>
-                                <td className="text-right py-2 px-2 text-ink/60">{r.startClose.toFixed(2)}</td>
-                                <td className="text-right py-2 px-2 text-ink/60">{r.endClose.toFixed(2)}</td>
-                                <td className={cn('text-right py-2 px-2 font-bold', r.returnPct >= 0 ? 'text-accent' : 'text-danger')}>
-                                  {r.returnPct >= 0 ? '+' : ''}
-                                  {r.returnPct.toFixed(1)}%
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {sectorReturns.length === 0 && (
-                          <p className="text-[11px] font-mono text-ink/40 py-8 text-center">Sin datos en esta ventana.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
-                        Estudio de eventos: ICD z-score &gt; {zThreshold}
-                      </h3>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[10px] font-mono">
-                          <thead>
-                            <tr className="text-ink/50 border-b border-border">
-                              <th className="text-left py-2 px-2">Sector</th>
-                              <th className="text-right py-2 px-2">N eventos</th>
-                              {corrMatrix.lags.map((l) => (
-                                <th key={l} className="text-right py-2 px-2">
-                                  Post {l}d / Base {l}d
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {events.map((ev) => (
-                              <tr key={ev.ticker} className="border-b border-border/40">
-                                <td className="py-2 px-2">
-                                  {ev.sector} <span className="text-ink/40">({ev.ticker})</span>
-                                </td>
-                                <td className="text-right py-2 px-2">{ev.nEvents}</td>
-                                {corrMatrix.lags.map((l) => {
-                                  const cell = ev.byLag[l];
-                                  return (
-                                    <td key={l} className="text-right py-2 px-2">
-                                      {cell?.postEventMean !== null && cell?.postEventMean !== undefined ? `${(cell.postEventMean * 100).toFixed(2)}%` : '—'}
-                                      {' / '}
-                                      {cell?.baseMean !== null && cell?.baseMean !== undefined ? `${(cell.baseMean * 100).toFixed(2)}%` : '—'}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-[9px] font-mono text-ink/40 mt-2">
-                        Compara el retorno futuro promedio despues de un evento de anomalia (Post) contra el retorno promedio incondicional (Base).
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
                         Estrategia: comprar mayor delta ICD ({lookbackDays}d) —{' '}
                         {strategyMethod === 'fixed'
                           ? `M1: mantener ${holdDays}d`
@@ -805,7 +746,19 @@ export default function DensityLab() {
                               ? `M3: M2 + filtro vol. precio (k=${priceVolK})`
                               : `M4: portafolio segun regimen SPY (k=${priceVolK})`}
                       </h3>
-                      <EquityCurveChart strategy={strategyCurve} benchmark={spyFullCurve} />
+                      <p className="text-[9px] font-mono text-ink/40 mb-2">
+                        Vista consolidada: las 3 ventanas encadenadas en una sola curva de equity (2018-presente),
+                        separadas por linea vertical entrecortada. Click en un tramo de la curva (o su etiqueta)
+                        para ver el rendimiento y los ratios de esa ventana debajo, y para que las pestanas Grafico
+                        Principal/Mapa/Ranking usen esa misma ventana.
+                      </p>
+                      <EquityCurveChart
+                        segments={combinedStrategySegments}
+                        benchmark={combinedBenchmarkCurve}
+                        boundaries={WINDOW_BOUNDARIES}
+                        selectedWindow={windowKey}
+                        onSelectWindow={setWindowKey}
+                      />
                       {strategyCurve.length >= 2 && (
                         <div className="mt-4 space-y-4">
                           <div>
@@ -956,6 +909,91 @@ export default function DensityLab() {
                           </p>
                         </div>
                       )}
+                    </div>
+
+                    <div>
+                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
+                        Retorno real por sector en esta ventana (Buy &amp; Hold)
+                      </h3>
+                      <p className="text-[9px] font-mono text-ink/40 mb-3">
+                        Cuanto se hubiera ganado o perdido invirtiendo en cada sector el primer dia de la ventana
+                        activa ({activeWindow.start}) y manteniendo hasta {activeWindow.end ?? 'hoy'} — sin rotar,
+                        sin ICD, solo el precio del ETF.
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px] font-mono">
+                          <thead>
+                            <tr className="text-ink/50 border-b border-border">
+                              <th className="text-left py-2 px-2">Sector</th>
+                              <th className="text-right py-2 px-2">Inicio ({sectorReturns[0]?.startDate ?? '—'})</th>
+                              <th className="text-right py-2 px-2">Fin ({sectorReturns[0]?.endDate ?? '—'})</th>
+                              <th className="text-right py-2 px-2">Retorno</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sectorReturns.map((r) => (
+                              <tr key={r.ticker} className="border-b border-border/40">
+                                <td className="py-2 px-2">
+                                  {r.sector} <span className="text-ink/40">({r.ticker})</span>
+                                </td>
+                                <td className="text-right py-2 px-2 text-ink/60">{r.startClose.toFixed(2)}</td>
+                                <td className="text-right py-2 px-2 text-ink/60">{r.endClose.toFixed(2)}</td>
+                                <td className={cn('text-right py-2 px-2 font-bold', r.returnPct >= 0 ? 'text-accent' : 'text-danger')}>
+                                  {r.returnPct >= 0 ? '+' : ''}
+                                  {r.returnPct.toFixed(1)}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {sectorReturns.length === 0 && (
+                          <p className="text-[11px] font-mono text-ink/40 py-8 text-center">Sin datos en esta ventana.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-[11px] font-mono uppercase tracking-widest text-ink/60 mb-3">
+                        Estudio de eventos: ICD z-score &gt; {zThreshold}
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[10px] font-mono">
+                          <thead>
+                            <tr className="text-ink/50 border-b border-border">
+                              <th className="text-left py-2 px-2">Sector</th>
+                              <th className="text-right py-2 px-2">N eventos</th>
+                              {corrMatrix.lags.map((l) => (
+                                <th key={l} className="text-right py-2 px-2">
+                                  Post {l}d / Base {l}d
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {events.map((ev) => (
+                              <tr key={ev.ticker} className="border-b border-border/40">
+                                <td className="py-2 px-2">
+                                  {ev.sector} <span className="text-ink/40">({ev.ticker})</span>
+                                </td>
+                                <td className="text-right py-2 px-2">{ev.nEvents}</td>
+                                {corrMatrix.lags.map((l) => {
+                                  const cell = ev.byLag[l];
+                                  return (
+                                    <td key={l} className="text-right py-2 px-2">
+                                      {cell?.postEventMean !== null && cell?.postEventMean !== undefined ? `${(cell.postEventMean * 100).toFixed(2)}%` : '—'}
+                                      {' / '}
+                                      {cell?.baseMean !== null && cell?.baseMean !== undefined ? `${(cell.baseMean * 100).toFixed(2)}%` : '—'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-[9px] font-mono text-ink/40 mt-2">
+                        Compara el retorno futuro promedio despues de un evento de anomalia (Post) contra el retorno promedio incondicional (Base).
+                      </p>
                     </div>
                   </div>
                 )}
