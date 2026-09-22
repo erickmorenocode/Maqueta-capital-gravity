@@ -94,10 +94,10 @@ interface ApiResponse {
 type TabKey = 'grafico' | 'mapa' | 'ranking' | 'backtest';
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: 'backtest', label: 'Backtesting Cuantitativo' },
   { key: 'grafico', label: 'Grafico Principal' },
   { key: 'mapa', label: 'Mapa de Rotacion' },
   { key: 'ranking', label: 'Ranking de Sectores' },
-  { key: 'backtest', label: 'Backtesting Cuantitativo' },
 ];
 
 function Slider({
@@ -159,7 +159,7 @@ export default function DensityLab() {
   const [priceVolK, setPriceVolK] = useState(0.25);
   const [strategyMethod, setStrategyMethod] = useState<'fixed' | 'icdExit' | 'priceVolFilter' | 'regimeSwitch'>('regimeSwitch');
   const [selectedTicker, setSelectedTicker] = useState<string>('XLK');
-  const [activeTab, setActiveTab] = useState<TabKey>('grafico');
+  const [activeTab, setActiveTab] = useState<TabKey>('backtest');
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', !darkMode);
