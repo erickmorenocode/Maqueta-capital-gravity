@@ -165,13 +165,9 @@ export default function EquityCurveChart({ segments, benchmark, boundaries = [],
             const dimmed = !selectedWindow || selectedWindow === s.key ? 1 : 0.5;
             return (
               <g key={s.key} style={{ pointerEvents: 'none' }}>
-                {s.leadingFlatPath && (
-                  <path d={s.leadingFlatPath} fill="none" stroke={s.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.35 * dimmed} />
-                )}
+                {s.leadingFlatPath && <path d={s.leadingFlatPath} fill="none" stroke={s.color} strokeWidth={1.6} opacity={0.85 * dimmed} />}
                 <path d={s.path} fill="none" stroke={s.color} strokeWidth={selectedWindow === s.key ? 2.6 : 1.8} opacity={dimmed} />
-                {s.trailingFlatPath && (
-                  <path d={s.trailingFlatPath} fill="none" stroke={s.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.35 * dimmed} />
-                )}
+                {s.trailingFlatPath && <path d={s.trailingFlatPath} fill="none" stroke={s.color} strokeWidth={1.6} opacity={0.85 * dimmed} />}
               </g>
             );
           })}
