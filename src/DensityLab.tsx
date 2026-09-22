@@ -332,6 +332,16 @@ export default function DensityLab() {
       if (curve.length === 0) continue;
       const base = curve[0].value;
       const points = curve.map((p) => ({ date: p.date, value: (p.value / base) * carry }));
+      // Anclas de continuidad: el primer trade real puede caer varios dias
+      // despues del inicio de la ventana (espera el lookback) y el ultimo
+      // trade puede cerrar antes del fin de la ventana (sin señal de
+      // reentrada) -- sin estas anclas el tramo no llega a los bordes de su
+      // ventana y se ve un corte/hueco en vez de linea continua con el
+      // tramo vecino. El valor es plano (sin posicion abierta = equity no
+      // cambia) hasta el primer trade y desde el ultimo.
+      if (points[0].date > w.start) points.unshift({ date: w.start, value: points[0].value });
+      const windowEnd = w.end ?? points[points.length - 1].date;
+      if (points[points.length - 1].date < windowEnd) points.push({ date: windowEnd, value: points[points.length - 1].value });
       carry = points[points.length - 1].value;
       segments.push({ key, label: WINDOWS[key].label, color: WINDOW_COLORS[key], points });
     }
