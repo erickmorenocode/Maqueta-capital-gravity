@@ -469,6 +469,34 @@ export interface Trade {
   appliedMethod?: string;
 }
 
+/**
+ * Genera puntos de equity marcados a mercado DIA A DIA durante una
+ * tenencia, en vez de saltar directo de la fecha de entrada a la de
+ * salida. Sin esto, Max Drawdown/Calmar (que escanean la curva completa
+ * en computeStrategyStats) no ven ninguna caida que haya ocurrido
+ * mientras la posicion estaba abierta y se recupero antes de salir --
+ * verificado offline (scripts/testDailyMarkDrawdown.mjs) que esto
+ * subestimaba el drawdown real hasta 5.5 puntos porcentuales en M2/M3/M4.
+ */
+function markToMarketDaily(
+  dates: string[],
+  closeMap: Map<string, number>,
+  entryDate: string,
+  exitDate: string,
+  entryPrice: number,
+  equityBeforeTrade: number
+): EquityPoint[] {
+  const points: EquityPoint[] = [];
+  for (const d of dates) {
+    if (d < entryDate) continue;
+    if (d > exitDate) break;
+    const close = closeMap.get(d);
+    if (close === undefined) continue;
+    points.push({ date: d, value: equityBeforeTrade * (close / entryPrice) });
+  }
+  return points;
+}
+
 export function simulateIcdRotationStrategy(
   sectorMetrics: Record<string, DensityRow[]>,
   lookbackDays: number,
@@ -525,9 +553,8 @@ export function simulateIcdRotationStrategy(
     const exitPrice = closeMap.get(exitDate)!;
     const tradeReturn = exitPrice / entryPrice - 1;
 
+    equity.push(...markToMarketDaily(dates, closeMap, rebalanceDate, exitDate, entryPrice, equityValue));
     equityValue *= 1 + tradeReturn;
-    if (equity.length === 0) equity.push({ date: rebalanceDate, value: 1.0 });
-    equity.push({ date: exitDate, value: equityValue });
     outTrades?.push({
       ticker: bestTicker,
       entryDate: rebalanceDate,
@@ -607,8 +634,7 @@ export function simulateIcdExitStrategy(
       const icdNow = icdByTicker[position.ticker].get(date);
       const closeNow = closeByTicker[position.ticker].get(date);
       if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
-        equityValue *= 1 + (closeNow / position.entryPrice - 1);
-        equity.push({ date, value: equityValue });
+        equity.push(...markToMarketDaily(dates, closeByTicker[position.ticker], position.entryDate, date, position.entryPrice, equityValue));
         outTrades?.push({
           ticker: position.ticker,
           entryDate: position.entryDate,
@@ -617,6 +643,7 @@ export function simulateIcdExitStrategy(
           exitPrice: closeNow,
           returnPct: (closeNow / position.entryPrice - 1) * 100,
         });
+        equityValue *= 1 + (closeNow / position.entryPrice - 1);
         position = null;
       }
     }
@@ -628,7 +655,6 @@ export function simulateIcdExitStrategy(
         const entryPrice = closeByTicker[bestTicker].get(date);
         if (entryPrice !== undefined) {
           position = { ticker: bestTicker, entryPrice, entryDate: date };
-          if (equity.length === 0) equity.push({ date, value: 1.0 });
         }
       }
     }
@@ -641,8 +667,7 @@ export function simulateIcdExitStrategy(
     const lastDate = dates[dates.length - 1];
     const lastClose = closeByTicker[position.ticker].get(lastDate);
     if (lastClose !== undefined) {
-      equityValue *= 1 + (lastClose / position.entryPrice - 1);
-      equity.push({ date: lastDate, value: equityValue });
+      equity.push(...markToMarketDaily(dates, closeByTicker[position.ticker], position.entryDate, lastDate, position.entryPrice, equityValue));
       outTrades?.push({
         ticker: position.ticker,
         entryDate: position.entryDate,
@@ -752,8 +777,7 @@ export function simulateIcdPriceVolFilterStrategy(
       const icdNow = icdByTicker[position.ticker].get(date);
       const closeNow = closeByTicker[position.ticker].get(date);
       if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
-        equityValue *= 1 + (closeNow / position.entryPrice - 1);
-        equity.push({ date, value: equityValue });
+        equity.push(...markToMarketDaily(dates, closeByTicker[position.ticker], position.entryDate, date, position.entryPrice, equityValue));
         outTrades?.push({
           ticker: position.ticker,
           entryDate: position.entryDate,
@@ -762,6 +786,7 @@ export function simulateIcdPriceVolFilterStrategy(
           exitPrice: closeNow,
           returnPct: (closeNow / position.entryPrice - 1) * 100,
         });
+        equityValue *= 1 + (closeNow / position.entryPrice - 1);
         position = null;
       }
     }
@@ -778,7 +803,6 @@ export function simulateIcdPriceVolFilterStrategy(
           const entryPrice = closeByTicker[bestTicker].get(date);
           if (entryPrice !== undefined) {
             position = { ticker: bestTicker, entryPrice, entryDate: date };
-            if (equity.length === 0) equity.push({ date, value: 1.0 });
           }
         }
       }
@@ -789,8 +813,7 @@ export function simulateIcdPriceVolFilterStrategy(
     const lastDate = dates[dates.length - 1];
     const lastClose = closeByTicker[position.ticker].get(lastDate);
     if (lastClose !== undefined) {
-      equityValue *= 1 + (lastClose / position.entryPrice - 1);
-      equity.push({ date: lastDate, value: equityValue });
+      equity.push(...markToMarketDaily(dates, closeByTicker[position.ticker], position.entryDate, lastDate, position.entryPrice, equityValue));
       outTrades?.push({
         ticker: position.ticker,
         entryDate: position.entryDate,
@@ -944,8 +967,7 @@ export function simulateIcdRegimeSwitchStrategy(
       const icdNow = icdByTicker[position.ticker].get(date);
       const closeNow = closeByTicker[position.ticker].get(date);
       if (icdNow !== null && icdNow !== undefined && icdNow < 0 && closeNow !== undefined) {
-        equityValue *= 1 + (closeNow / position.entryPrice - 1);
-        equity.push({ date, value: equityValue });
+        equity.push(...markToMarketDaily(dates, closeByTicker[position.ticker], position.entryDate, date, position.entryPrice, equityValue));
         outTrades?.push({
           ticker: position.ticker,
           entryDate: position.entryDate,
@@ -955,6 +977,7 @@ export function simulateIcdRegimeSwitchStrategy(
           returnPct: (closeNow / position.entryPrice - 1) * 100,
           appliedMethod: position.appliedMethod,
         });
+        equityValue *= 1 + (closeNow / position.entryPrice - 1);
         position = null;
       }
     }
@@ -981,7 +1004,6 @@ export function simulateIcdRegimeSwitchStrategy(
           if (entryPrice !== undefined) {
             const appliedMethod = regime === 'low' ? 'M3 (baja volatilidad, filtro precio)' : 'M2 (alta volatilidad, sin filtro)';
             position = { ticker: bestTicker, entryPrice, entryDate: date, appliedMethod };
-            if (equity.length === 0) equity.push({ date, value: 1.0 });
           }
         }
       }
@@ -992,8 +1014,7 @@ export function simulateIcdRegimeSwitchStrategy(
     const lastDate = dates[dates.length - 1];
     const lastClose = closeByTicker[position.ticker].get(lastDate);
     if (lastClose !== undefined) {
-      equityValue *= 1 + (lastClose / position.entryPrice - 1);
-      equity.push({ date: lastDate, value: equityValue });
+      equity.push(...markToMarketDaily(dates, closeByTicker[position.ticker], position.entryDate, lastDate, position.entryPrice, equityValue));
       outTrades?.push({
         ticker: position.ticker,
         entryDate: position.entryDate,
@@ -1048,39 +1069,51 @@ export interface StrategyStats {
 
 /**
  * Metricas de riesgo/retorno de una curva de equity (EquityPoint[] de
- * simulateIcdRotationStrategy o simulateIcdExitStrategy -- misma forma,
- * funciona con cualquiera de las dos metodologias sin cambios).
+ * cualquiera de las simulateIcd*Strategy, o de buyAndHoldCurve).
  *
- * Sharpe: retorno medio por trade / desvio estandar de esos retornos,
- * anualizado por trades/año usando el promedio REAL de dias calendario
- * entre trades (no un holdDays nominal) -- funciona igual para M1 (plazo
- * fijo) y M2 (plazo variable), mismo criterio que se uso para elegir los
- * defaults via grid search (scripts/gridSearchM2Fine.mjs). Rf=0
- * (simplificacion, no resta tasa libre de riesgo).
+ * `trades` (opcional): lista real de trades (Trade[], del parametro
+ * outTrades de las simulate*Strategy) -- si se pasa, trades/wins/losses/
+ * profitFactor/riskReward se calculan sobre el retorno REAL de cada trade
+ * (returnPct), no sobre los deltas entre puntos consecutivos de `curve`.
+ * Hace falta porque `curve` ahora viene marcada a mercado DIA A DIA (ver
+ * markToMarketDaily) para que Max Drawdown/Calmar sean precisos -- sin
+ * este parametro, "trades" contaria dias en vez de operaciones reales.
+ * Si no se pasa (ej. SPY buy&hold, sin trades discretos), cae al
+ * comportamiento anterior: retornos punto a punto de `curve`.
+ *
+ * Sharpe: SIEMPRE sobre los retornos punto a punto de `curve` completa
+ * (dia a dia si viene de simulate*Strategy), anualizado por periodos/año
+ * usando el promedio REAL de dias calendario entre puntos -- asi es
+ * comparable entre metodologias con distinta frecuencia de rotacion y
+ * con el benchmark (que siempre fue diario). Rf=0 (simplificacion, no
+ * resta tasa libre de riesgo).
  *
  * Profit Factor: `Infinity` si hubo ganancias y CERO perdidas (caso
  * real, no bug) -- la UI lo debe mostrar como "∞", no como error.
  *
  * Calmar Ratio: CAGR (retorno anualizado, compuesto sobre TODO el periodo
- * de la curva -- no el promedio de retornos por trade que usa Sharpe)
- * dividido por el maximo drawdown (la peor caida pico-a-valle de la curva
- * de equity completa, no solo entre trades individuales). A diferencia
- * de Sharpe (penaliza toda la volatilidad por igual, subidas y bajadas),
- * Calmar solo mira que tan profundo fue el peor momento real -- estandar
- * en managed futures/CTAs para medir "cuanto retorno por unidad de dolor
- * maximo soportado". `Infinity` si nunca hubo drawdown y el CAGR es
+ * de la curva) dividido por el maximo drawdown (la peor caida pico-a-valle
+ * de la curva de equity completa, ahora capturando tambien caidas
+ * intra-posicion gracias al marcado diario). A diferencia de Sharpe
+ * (penaliza toda la volatilidad por igual, subidas y bajadas), Calmar
+ * solo mira que tan profundo fue el peor momento real -- estandar en
+ * managed futures/CTAs. `Infinity` si nunca hubo drawdown y el CAGR es
  * positivo (caso real, no bug).
  */
-export function computeStrategyStats(curve: EquityPoint[]): StrategyStats {
-  const trades = curve.length >= 2 ? curve.length - 1 : 0;
-  if (trades === 0)
+export function computeStrategyStats(curve: EquityPoint[], trades?: Trade[]): StrategyStats {
+  if (curve.length < 2)
     return { trades: 0, wins: 0, losses: 0, sharpe: null, profitFactor: null, riskReward: null, maxDrawdownPct: null, calmarRatio: null };
 
-  const returns: number[] = [];
-  for (let i = 1; i < curve.length; i++) returns.push(curve[i].value / curve[i - 1].value - 1);
+  // Retornos punto a punto de la curva completa -- base de Sharpe siempre,
+  // y de trades/wins/losses/PF/R:B cuando no hay lista de trades real.
+  const curveReturns: number[] = [];
+  for (let i = 1; i < curve.length; i++) curveReturns.push(curve[i].value / curve[i - 1].value - 1);
 
-  const winReturns = returns.filter((r) => r > 0);
-  const lossReturns = returns.filter((r) => r < 0);
+  const tradeReturns = trades && trades.length > 0 ? trades.map((t) => t.returnPct / 100) : curveReturns;
+  const tradeCount = trades && trades.length > 0 ? trades.length : curve.length - 1;
+
+  const winReturns = tradeReturns.filter((r) => r > 0);
+  const lossReturns = tradeReturns.filter((r) => r < 0);
   const grossProfit = winReturns.reduce((a, b) => a + b, 0);
   const grossLoss = Math.abs(lossReturns.reduce((a, b) => a + b, 0));
 
@@ -1091,22 +1124,21 @@ export function computeStrategyStats(curve: EquityPoint[]): StrategyStats {
   const riskReward = avgWin !== null && avgLoss !== null && avgLoss > 0 ? avgWin / avgLoss : null;
 
   let sharpe: number | null = null;
-  if (returns.length >= 2) {
-    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-    const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / (returns.length - 1);
+  if (curveReturns.length >= 2) {
+    const mean = curveReturns.reduce((a, b) => a + b, 0) / curveReturns.length;
+    const variance = curveReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (curveReturns.length - 1);
     const std = Math.sqrt(variance);
     if (std > 0) {
       const totalCalendarDays = (new Date(curve[curve.length - 1].date).getTime() - new Date(curve[0].date).getTime()) / 86400000;
-      const avgCalendarDaysPerTrade = totalCalendarDays / returns.length;
-      if (avgCalendarDaysPerTrade > 0) {
-        const periodsPerYear = 365 / avgCalendarDaysPerTrade;
+      const avgCalendarDaysPerPeriod = totalCalendarDays / curveReturns.length;
+      if (avgCalendarDaysPerPeriod > 0) {
+        const periodsPerYear = 365 / avgCalendarDaysPerPeriod;
         sharpe = (mean / std) * Math.sqrt(periodsPerYear);
       }
     }
   }
 
-  // Max drawdown: sobre la curva de equity COMPLETA (cada punto, no solo
-  // los retornos por trade que usa Sharpe) -- la peor caida desde
+  // Max drawdown: sobre la curva de equity COMPLETA -- la peor caida desde
   // cualquier pico previo hasta cualquier valle posterior.
   let peak = curve[0].value;
   let maxDrawdown = 0; // fraccion 0-1
@@ -1130,5 +1162,5 @@ export function computeStrategyStats(curve: EquityPoint[]): StrategyStats {
     }
   }
 
-  return { trades, wins: winReturns.length, losses: lossReturns.length, sharpe, profitFactor, riskReward, maxDrawdownPct, calmarRatio };
+  return { trades: tradeCount, wins: winReturns.length, losses: lossReturns.length, sharpe, profitFactor, riskReward, maxDrawdownPct, calmarRatio };
 }

@@ -210,18 +210,21 @@ export default function DensityLab() {
   const corrMatrix = useMemo(() => lagCorrelationMatrix(sectorMetricsWindow), [sectorMetricsWindow]);
   const sectorReturns = useMemo(() => sectorBuyAndHoldReturns(sectorMetricsWindow), [sectorMetricsWindow]);
   const events = useMemo(() => eventStudy(sectorMetricsWindow, zThreshold), [sectorMetricsWindow, zThreshold]);
-  const fixedHoldCurve = useMemo(
-    () => simulateIcdRotationStrategy(sectorMetricsWindow, lookbackDays, holdDays),
-    [sectorMetricsWindow, lookbackDays, holdDays]
-  );
-  const icdExitCurve = useMemo(
-    () => simulateIcdExitStrategy(sectorMetricsWindow, lookbackDays),
-    [sectorMetricsWindow, lookbackDays]
-  );
-  const priceVolFilterCurve = useMemo(
-    () => simulateIcdPriceVolFilterStrategy(sectorMetricsWindow, lookbackDays, priceVolK),
-    [sectorMetricsWindow, lookbackDays, priceVolK]
-  );
+  const fixedHoldResult = useMemo(() => {
+    const trades: Trade[] = [];
+    const curve = simulateIcdRotationStrategy(sectorMetricsWindow, lookbackDays, holdDays, trades);
+    return { curve, trades };
+  }, [sectorMetricsWindow, lookbackDays, holdDays]);
+  const icdExitResult = useMemo(() => {
+    const trades: Trade[] = [];
+    const curve = simulateIcdExitStrategy(sectorMetricsWindow, lookbackDays, trades);
+    return { curve, trades };
+  }, [sectorMetricsWindow, lookbackDays]);
+  const priceVolFilterResult = useMemo(() => {
+    const trades: Trade[] = [];
+    const curve = simulateIcdPriceVolFilterStrategy(sectorMetricsWindow, lookbackDays, priceVolK, 60, trades);
+    return { curve, trades };
+  }, [sectorMetricsWindow, lookbackDays, priceVolK]);
   // Regimen de SPY sobre la serie COMPLETA (no la ventana activa) -- la
   // mediana movil de 252 dias necesita historia previa al inicio de la
   // ventana para clasificar correctamente los primeros dias de esta.
@@ -231,19 +234,20 @@ export default function DensityLab() {
     if (!spyBars) return new Map();
     return buildMarketRegimeMap(spyBars);
   }, [data]);
-  const regimeSwitchCurve = useMemo(
-    () => simulateIcdRegimeSwitchStrategy(sectorMetricsWindow, lookbackDays, priceVolK, regimeMap),
-    [sectorMetricsWindow, lookbackDays, priceVolK, regimeMap]
-  );
-  const strategyCurve =
+  const regimeSwitchResult = useMemo(() => {
+    const trades: Trade[] = [];
+    const curve = simulateIcdRegimeSwitchStrategy(sectorMetricsWindow, lookbackDays, priceVolK, regimeMap as Map<string, MarketRegime>, 60, trades);
+    return { curve, trades };
+  }, [sectorMetricsWindow, lookbackDays, priceVolK, regimeMap]);
+  const { curve: strategyCurve, trades: strategyTrades } =
     strategyMethod === 'fixed'
-      ? fixedHoldCurve
+      ? fixedHoldResult
       : strategyMethod === 'icdExit'
-        ? icdExitCurve
+        ? icdExitResult
         : strategyMethod === 'priceVolFilter'
-          ? priceVolFilterCurve
-          : regimeSwitchCurve;
-  const strategyStats = useMemo(() => computeStrategyStats(strategyCurve), [strategyCurve]);
+          ? priceVolFilterResult
+          : regimeSwitchResult;
+  const strategyStats = useMemo(() => computeStrategyStats(strategyCurve, strategyTrades), [strategyCurve, strategyTrades]);
   // SPY real: dia a dia, TODA la ventana (no recortado a las fechas de
   // trade de la estrategia). Es el buy&hold real -- el "Retorno SPY" y el
   // "Alpha simple" mostrados en pantalla se calculan sobre esto, no sobre
