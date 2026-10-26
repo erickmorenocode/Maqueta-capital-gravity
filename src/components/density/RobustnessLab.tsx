@@ -258,8 +258,10 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
         <div className="text-danger">
           {extError
             ? `No se pudo descargar el historial (${extError}).`
-            : prepared && !prepared.commonStart
-              ? `Sin datos reales completos para: ${prepared.limiting.join(', ')}. No se calcula nada con datos incompletos.`
+            : prepared && prepared.violations.length > 0
+              ? `Datos no alineados (${prepared.violations.join('; ')}). No se calcula nada.`
+              : prepared && !prepared.commonStart
+                ? `Sin datos reales completos para: ${prepared.limiting.join(', ')}. No se calcula nada con datos incompletos.`
               : 'Sin rango comun con ICD calculado para todos los ETFs.'}
         </div>
         <button
@@ -291,7 +293,7 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
               <tr className="text-ink/50 border-b border-border">
                 <th className="text-left py-1.5 px-2">Ticker</th>
                 <th className="text-right py-1.5 px-2">Primer precio/volumen (Yahoo)</th>
-                <th className="text-right py-1.5 px-2">Primer tamaño real (EDGAR)</th>
+                <th className="text-right py-1.5 px-2">Primer tamaño real publicado (EDGAR)</th>
                 <th className="text-right py-1.5 px-2">Datos completos desde</th>
               </tr>
             </thead>
@@ -310,7 +312,8 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
             Regla: el modelo arranca solo cuando los 13 ETFs y SPY tienen TODOS sus insumos reales (cierre ajustado y volumen de Yahoo + tamaño
             de fondo de SEC EDGAR). Nada se rellena hacia atras ni se interpola: antes de {prepared.commonStart} no se usa ningun dato, todos
             los ETFs rotan desde el mismo dia, y si a un ticker le falta un dia ese dia se descarta para todos. Se descarta el tamaño "en vivo"
-            de hoy (dato futuro para el periodo historico); entre anclas EDGAR se mantiene el ultimo valor real ya publicado. Las medias moviles
+            de hoy (dato futuro para el periodo historico). Cada ancla EDGAR rige desde el dia siguiente a su publicacion (filing), no desde el
+            cierre del periodo que reporta (60-95 dias antes); entre anclas se mantiene el ultimo valor real ya publicado. Las medias moviles
             (ICD {rollingWindow}d, vol. de precio, regimen de SPY) arrancan en {prepared.commonStart} -- por eso el modelo opera desde{' '}
             {rangeStart}, cuando todos los ETFs ya tienen ICD. Para extender el rango hacia atras habria que conseguir anclas EDGAR reales mas
             viejas y/o sacar del universo los ETFs mas nuevos.

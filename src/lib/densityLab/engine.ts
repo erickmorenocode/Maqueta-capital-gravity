@@ -86,6 +86,8 @@ export interface SizeAnchor {
   marketCap: number;
   sharesOutstanding: number;
   floatShares?: number;
+  /** Fecha de publicacion en SEC EDGAR (filing); `date` es el cierre del periodo reportado. Ver scripts/addEdgarFilingDates.mjs. */
+  filed?: string;
 }
 
 /**

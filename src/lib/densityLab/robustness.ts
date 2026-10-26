@@ -135,7 +135,7 @@ export interface TickerCoverage {
   ticker: string;
   /** Primer cierre/volumen real de Yahoo. */
   firstPrice: string | null;
-  /** Primera ancla REAL de tamaño de fondo (SEC EDGAR), sin el punto en vivo. */
+  /** Primer dia en que rige un ancla REAL de tamaño (dia siguiente a su publicacion en SEC EDGAR), sin el punto en vivo. */
   firstSize: string | null;
   /** max(firstPrice, firstSize): desde aca el ticker tiene TODOS sus insumos reales. */
   firstComplete: string | null;
@@ -153,6 +153,14 @@ export interface PreparedData {
   sizeSeries: Record<string, SizeAnchor[]>;
   /** Fechas descartadas porque al menos un ticker no tenia barra ese dia. */
   droppedDates: string[];
+  /** Fallas del chequeo final de alineacion (ver checkAlignment). Si hay alguna, no se entrega ningun dato. */
+  violations: string[];
+}
+
+function nextDayISO(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -164,6 +172,11 @@ export interface PreparedData {
  *  - no se rellena hacia atras el tamaño de fondo (sizeAt usaria la
  *    primera ancla para fechas anteriores a ella -- valor que todavia no
  *    existia);
+ *  - cada ancla EDGAR rige desde el dia SIGUIENTE a su publicacion
+ *    (`filed`), no desde el cierre del periodo que reporta (`date`): el
+ *    N-CSR de los XL* sale 61-68 dias despues del cierre, el N-30B-2 de
+ *    QQQ 81-95. Usar `date` aplicaria un valor que todavia no era
+ *    publico. Un ancla sin `filed` se descarta;
  *  - se descarta el ancla "en vivo" (tamaño de HOY fechado despues de la
  *    ultima ancla EDGAR), que aplicaria un dato futuro al periodo
  *    historico; despues de la ultima ancla real se hace forward-fill del
@@ -189,7 +202,11 @@ export function prepareCommonData(
   const realSize: Record<string, SizeAnchor[]> = {};
   for (const t of etfs) {
     const live = liveSizeAnchorDates[t];
-    realSize[t] = (sizeSeries[t] ?? []).filter((a) => a.date !== live && a.date <= end);
+    realSize[t] = (sizeSeries[t] ?? [])
+      .filter((a) => a.date !== live && a.filed !== undefined)
+      .map((a) => ({ ...a, date: nextDayISO(a.filed as string) }))
+      .filter((a) => a.date <= end)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   const coverage: TickerCoverage[] = [...etfs, benchmark].map((t) => {
@@ -199,7 +216,7 @@ export function prepareCommonData(
     return { ticker: t, firstPrice, firstSize: t === benchmark ? null : firstSize, firstComplete };
   });
 
-  const empty = { coverage, commonStart: null, limiting: [], priceBars: {}, sizeSeries: realSize, droppedDates: [] };
+  const empty = { coverage, commonStart: null, limiting: [], priceBars: {}, sizeSeries: realSize, droppedDates: [], violations: [] };
   if (coverage.some((c) => c.firstComplete === null)) {
     return { ...empty, limiting: coverage.filter((c) => c.firstComplete === null).map((c) => c.ticker) };
   }
@@ -217,7 +234,36 @@ export function prepareCommonData(
   const aligned: Record<string, PriceBar[]> = {};
   for (const t of tickers) aligned[t] = inRange[t].filter((b) => common.has(b.date));
 
-  return { coverage, commonStart, limiting, priceBars: aligned, sizeSeries: realSize, droppedDates };
+  const violations = checkAlignment(aligned, realSize, commonStart, etfs, benchmark);
+  if (violations.length > 0) return { ...empty, violations };
+  return { coverage, commonStart, limiting, priceBars: aligned, sizeSeries: realSize, droppedDates, violations };
+}
+
+/**
+ * Chequeo final, independiente de como se armaron los datos: todos los
+ * tickers tienen exactamente la misma secuencia de fechas, ninguna barra
+ * es anterior a commonStart, no hay fechas repetidas y cada ETF ya tiene
+ * un tamaño real publicado el primer dia (sin relleno hacia atras).
+ */
+function checkAlignment(
+  aligned: Record<string, PriceBar[]>,
+  realSize: Record<string, SizeAnchor[]>,
+  commonStart: string,
+  etfs: readonly string[],
+  benchmark: string
+): string[] {
+  const out: string[] = [];
+  const ref = aligned[benchmark].map((b) => b.date);
+  if (ref.length === 0) out.push('Sin fechas en comun para todos los tickers');
+  if (new Set(ref).size !== ref.length) out.push('Fechas repetidas');
+  if (ref.length > 0 && ref[0] < commonStart) out.push(`Barras antes del inicio comun ${commonStart}`);
+  for (const t of etfs) {
+    const dates = aligned[t].map((b) => b.date);
+    if (dates.length !== ref.length || dates.some((d, i) => d !== ref[i])) out.push(`${t}: fechas distintas al resto`);
+    const firstAnchor = realSize[t]?.[0]?.date;
+    if (ref.length > 0 && (!firstAnchor || firstAnchor > ref[0])) out.push(`${t}: sin tamaño real publicado al ${ref[0]}`);
+  }
+  return out;
 }
 
 /**
