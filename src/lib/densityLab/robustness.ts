@@ -758,20 +758,31 @@ export interface YearRow {
   spyPct: number;
 }
 
-function dailyReturnsByYear(curve: EquityPoint[]): Map<number, number[]> {
-  const out = new Map<number, number[]>();
+interface DatedReturn {
+  date: string;
+  r: number;
+}
+
+function dailyReturnsByYear(curve: EquityPoint[]): Map<number, DatedReturn[]> {
+  const out = new Map<number, DatedReturn[]>();
   for (let i = 1; i < curve.length; i++) {
     const y = Number(curve[i].date.slice(0, 4));
     const r = stepReturn(curve[i - 1].value, curve[i].value);
     if (!out.has(y)) out.set(y, []);
-    out.get(y)!.push(r);
+    out.get(y)!.push({ date: curve[i].date, r });
   }
   return out;
 }
 
 export const MIN_YEAR_DAYS = 126;
 
-const compound = (rets: number[]) => rets.reduce((v, r) => v * (1 + r), 1) - 1;
+const compound = (rets: DatedReturn[]) => rets.reduce((v, x) => v * (1 + x.r), 1) - 1;
+
+/** Curva de equity (base 1) de una serie de retornos cosida: un punto por dia, con la fecha real de cada retorno. */
+function stitchedCurve(rets: DatedReturn[]): EquityPoint[] {
+  let v = 1;
+  return rets.map((x) => ({ date: x.date, value: (v *= 1 + x.r) }));
+}
 
 export interface YearScenario {
   key: 'all' | 'noBest' | 'noWorst' | 'noBoth';
@@ -780,6 +791,10 @@ export interface YearScenario {
   gross: PeriodMetrics | null;
   net: PeriodMetrics | null;
   spy: PeriodMetrics | null;
+  /** Curvas cosidas (años omitidos fuera, sin hueco): para graficar contra SPY. */
+  grossCurve: EquityPoint[];
+  netCurve: EquityPoint[];
+  spyCurve: EquityPoint[];
 }
 
 /**
@@ -822,15 +837,20 @@ export function evaluateYearOmission(
   const build = (key: YearScenario['key'], label: string, excluded: number[]): YearScenario => {
     const ex = new Set(excluded);
     const keep = new Set(yearsList.filter((y) => !ex.has(y)));
-    const pick = (m: Map<number, number[]>) => yearsList.filter((y) => keep.has(y)).flatMap((y) => m.get(y) ?? []);
+    const pick = (m: Map<number, DatedReturn[]>) => yearsList.filter((y) => keep.has(y)).flatMap((y) => m.get(y) ?? []);
     const nTrades = tradesInYears(keep);
+    const [pg, pn, ps] = [pick(g), pick(ne), pick(s)];
+    const rets = (xs: DatedReturn[]) => xs.map((x) => x.r);
     return {
       key,
       label,
       excluded: [...excluded].sort((a, b) => a - b),
-      gross: metricsFromReturns(pick(g), nTrades, nTrades * 2),
-      net: metricsFromReturns(pick(ne), nTrades, nTrades * 2),
-      spy: metricsFromReturns(pick(s)),
+      gross: metricsFromReturns(rets(pg), nTrades, nTrades * 2),
+      net: metricsFromReturns(rets(pn), nTrades, nTrades * 2),
+      spy: metricsFromReturns(rets(ps)),
+      grossCurve: stitchedCurve(pg),
+      netCurve: stitchedCurve(pn),
+      spyCurve: stitchedCurve(ps),
     };
   };
 
