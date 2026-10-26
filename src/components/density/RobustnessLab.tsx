@@ -192,9 +192,11 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
   const ready = usableStart !== null && rangeEnd !== null;
   const rangeStart = usableStart ?? '';
   const dataEnd = rangeEnd ?? '';
+  // Sin rango todavia (descargando datos) no se arma el split por defecto:
+  // rangeStart/dataEnd son '' y la aritmetica de fechas lanzaria.
   const customSplits = useMemo(
-    () => customSplitsState ?? [defaultCustomSplit(1, rangeStart, dataEnd)],
-    [customSplitsState, rangeStart, dataEnd]
+    () => customSplitsState ?? (ready ? [defaultCustomSplit(1, rangeStart, dataEnd)] : []),
+    [customSplitsState, ready, rangeStart, dataEnd]
   );
   const rangeLabel = `${rangeStart} a ${dataEnd}`;
 
