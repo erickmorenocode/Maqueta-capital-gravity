@@ -514,12 +514,14 @@ export default function DensityLab() {
   };
 
   // Pestana Pruebas de Robustez: misma metodologia/parametros de la barra
-  // lateral, pero con lookback variable (para el walk-forward que lo
-  // optimiza en cada In-Sample). No afecta ningun calculo de arriba.
+  // lateral, pero con lookback y mapa de regimen variables (walk-forward
+  // que optimiza el lookback en cada In-Sample; regimen calculado sobre
+  // los datos de cobertura comun de esa pestana). No afecta ningun
+  // calculo de arriba.
   const runStrategyForRobustness = useCallback(
-    (win: Record<string, DensityRow[]>, lb: number, outTrades: Trade[]) =>
-      runStrategyCurve(win, strategyMethod, lb, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>, outTrades),
-    [strategyMethod, holdDays, priceVolK, regimeMap]
+    (win: Record<string, DensityRow[]>, lb: number, regime: Map<string, MarketRegime>, outTrades: Trade[]) =>
+      runStrategyCurve(win, strategyMethod, lb, holdDays, priceVolK, regime, outTrades),
+    [strategyMethod, holdDays, priceVolK]
   );
 
   const selectedInfo = data?.staticInfos[selectedTicker];
@@ -839,9 +841,10 @@ export default function DensityLab() {
 
                 {activeTab === 'robustez' && (
                   <RobustnessLab
-                    sectorMetricsFull={sectorMetricsFull}
-                    spyBars={data.priceBars[BENCHMARK] ?? []}
+                    rollingWindow={rollingWindow}
+                    freeFloatRatio={freeFloatRatio}
                     runStrategy={runStrategyForRobustness}
+                    prefixReuse={strategyMethod !== 'fixed'}
                     lookbackDays={lookbackDays}
                     methodLabel={strategyMethodLabel()}
                   />

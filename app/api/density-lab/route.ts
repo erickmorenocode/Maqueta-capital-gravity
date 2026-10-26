@@ -30,13 +30,21 @@ function addDaysISO(dateStr: string, days: number): string {
 // tiempo (ver nota en computeDensityMetrics). Todo el calculo de metricas
 // (VMC, STR, FFT, ICD, correlaciones, backtest) pasa client-side en
 // src/DensityLab.tsx -- esta ruta solo trae los datos crudos.
-export async function GET() {
+//
+// `?from=YYYY-MM-DD` (opcional): inicio del historial de precios. Sin el
+// parametro se usa BACKTEST_START (2018) -- lo que usan las ventanas
+// Backtest/Validacion/Live, sin cambios. La pestana Pruebas de Robustez
+// pide desde 1997 (EXTENDED_FETCH_FROM) para usar todo el historial que
+// Yahoo tiene de los ETFs.
+export async function GET(request: Request) {
   const allTickers = [...SECTOR_ETFS, BENCHMARK];
   const today = new Date().toISOString().slice(0, 10);
+  const fromParam = new URL(request.url).searchParams.get('from');
+  const from = fromParam && /^\d{4}-\d{2}-\d{2}$/.test(fromParam) && fromParam >= '1990-01-01' && fromParam < today ? fromParam : BACKTEST_START;
 
   try {
     const [priceResults, staticResults] = await Promise.all([
-      Promise.all(allTickers.map((t) => downloadPriceHistory(t, BACKTEST_START, today))),
+      Promise.all(allTickers.map((t) => downloadPriceHistory(t, from, today))),
       Promise.all(allTickers.map((t) => fetchTickerStaticInfo(t))),
     ]);
 
@@ -49,6 +57,11 @@ export async function GET() {
     });
 
     const sizeSeries: Record<string, SizeAnchor[]> = {};
+    // Fecha del ancla "en vivo" de cada ticker (valor de HOY fechado al dia
+    // siguiente de la ultima ancla EDGAR) -- para que un consumidor que
+    // necesita solo datos historicos reales (pestana Pruebas de Robustez)
+    // la pueda descartar. No cambia nada para la pestana principal.
+    const liveSizeAnchorDates: Record<string, string> = {};
     const staticInfos: Record<string, TickerStaticInfo> = {};
     const missingStatic: string[] = [];
     allTickers.forEach((t, i) => {
@@ -58,6 +71,7 @@ export async function GET() {
         staticInfos[t] = live;
         const lastHistDate = anchors.length ? anchors[anchors.length - 1].date : null;
         const liveDate = lastHistDate ? addDaysISO(lastHistDate, 1) : today;
+        liveSizeAnchorDates[t] = liveDate;
         anchors.push({
           date: liveDate,
           marketCap: live.marketCap,
@@ -76,6 +90,7 @@ export async function GET() {
       asOf: new Date().toISOString(),
       priceBars,
       sizeSeries,
+      liveSizeAnchorDates,
       staticInfos,
       missingPrice,
       missingStatic,

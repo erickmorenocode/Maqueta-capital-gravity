@@ -1,25 +1,41 @@
 'use client';
 
 import * as d3 from 'd3';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { DensityRow, EquityPoint, PriceBar } from '@/src/lib/densityLab/engine';
 import {
-  ROBUSTNESS_START,
+  SECTOR_ETFS,
+  BENCHMARK,
+  computeAllSectorsDensity,
+  buildMarketRegimeMap,
+  type DensityRow,
+  type EquityPoint,
+  type PriceBar,
+  type SizeAnchor,
+} from '@/src/lib/densityLab/engine';
+import {
+  EXTENDED_FETCH_FROM,
   ROBUSTNESS_END,
-  ROBUSTNESS_YEARS,
   COMMISSION_LEVELS,
   CAPITAL_LEVELS,
+  createContext,
+  firstUsableDate,
+  prepareCommonData,
+  MIN_YEAR_DAYS,
   buildSplits,
+  customSplitIssue,
+  customSplitOverlaps,
+  customToSplitDef,
+  randomSplit,
   evaluatePeriod,
   evaluateSplits,
   evaluateYearOmission,
   netMetricsFor,
   breakEvenCommission,
   type CostConfig,
-  type PeriodMetrics,
+  type CustomSplit,
   type RunStrategyFn,
   type SplitScheme,
 } from '@/src/lib/densityLab/robustness';
@@ -37,17 +53,45 @@ const SUB_TABS: { key: SubTab; label: string }[] = [
 ];
 
 const SCHEMES: { key: SplitScheme; label: string; desc: string }[] = [
-  { key: 'rolling', label: 'Walk-forward rodante', desc: 'IS de 3 años que avanza 1 año; OOS = el año siguiente (2021-2025).' },
-  { key: 'anchored', label: 'Walk-forward anclado', desc: 'IS arranca siempre en 2018 y se expande; OOS = el año siguiente (2020-2025).' },
-  { key: 'inverse', label: 'Inverso (OOS en el pasado)', desc: 'IS en datos recientes, OOS en años anteriores: prueba otro regimen de mercado.' },
-  { key: 'custom', label: 'Personalizado', desc: 'Elegir años de IS y OOS a mano (2018-2025).' },
+  { key: 'rolling', label: 'Walk-forward rodante', desc: 'IS de 3 años que avanza 1 año; OOS = el año siguiente.' },
+  { key: 'anchored', label: 'Walk-forward anclado', desc: 'IS arranca siempre al inicio de los datos y se expande; OOS = el año siguiente.' },
+  { key: 'inverse', label: 'Inverso (OOS en el pasado)', desc: 'IS fijo en los ultimos 4 años; OOS = cada bloque de 4 años anterior.' },
+  { key: 'custom', label: 'Personalizado', desc: 'Fechas libres de IS y OOS (al dia), varios splits, o generados al azar.' },
 ];
 
+interface ExtendedData {
+  priceBars: Record<string, PriceBar[]>;
+  sizeSeries: Record<string, SizeAnchor[]>;
+  liveSizeAnchorDates?: Record<string, string>;
+}
+
+// Historial completo se descarga una sola vez por sesion de pagina -- la
+// pestana se desmonta al cambiar de pestana y no tiene sentido volver a
+// bajar 25+ años de 14 tickers cada vez.
+let extendedRequest: Promise<ExtendedData> | null = null;
+function loadExtended(): Promise<ExtendedData> {
+  if (!extendedRequest) {
+    extendedRequest = fetch(`/api/density-lab?from=${EXTENDED_FETCH_FROM}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+        return json as ExtendedData;
+      })
+      .catch((e) => {
+        extendedRequest = null;
+        throw e;
+      });
+  }
+  return extendedRequest;
+}
+
 interface Props {
-  sectorMetricsFull: Record<string, DensityRow[]>;
-  spyBars: PriceBar[];
-  /** Corre la metodologia activa de la barra lateral con un lookback dado. */
+  rollingWindow: number;
+  freeFloatRatio: number;
+  /** Corre la metodologia activa de la barra lateral con un lookback y mapa de regimen dados. */
   runStrategy: RunStrategyFn;
+  /** false para M1 (tenencia fija): no es seguro recortar una corrida larga, ver RobustnessContext.prefixReuse. */
+  prefixReuse: boolean;
   lookbackDays: number;
   methodLabel: string;
 }
@@ -59,7 +103,16 @@ const fmtNum = (v: number | null | undefined, digits = 2) =>
 const fmtUsd = (v: number) => `$${v.toLocaleString('es-ES', { maximumFractionDigits: 0 })}`;
 const tone = (v: number | null | undefined) => (v === null || v === undefined ? '' : v >= 0 ? 'text-accent' : 'text-danger');
 
-export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy, lookbackDays, methodLabel }: Props) {
+/** Split por defecto: IS desde el inicio del rango hasta 2022, OOS 2023-2025. */
+const defaultCustom = (id: number, rangeStart: string): CustomSplit => ({
+  id,
+  isStart: rangeStart,
+  isEnd: '2022-12-31',
+  oosStart: '2023-01-01',
+  oosEnd: ROBUSTNESS_END,
+});
+
+export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrategy, prefixReuse, lookbackDays, methodLabel }: Props) {
   const [subTab, setSubTab] = useState<SubTab>('windows');
   const [capital, setCapital] = useState(10000);
   const [commission, setCommission] = useState(1);
@@ -67,28 +120,83 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
 
   const [scheme, setScheme] = useState<SplitScheme>('rolling');
   const [optimizeLookback, setOptimizeLookback] = useState(false);
-  const [custom, setCustom] = useState({ isFrom: 2018, isTo: 2021, oosFrom: 2022, oosTo: 2025 });
+  // null = todavia sin tocar: se muestra el split por defecto del rango real.
+  const [customSplitsState, setCustomSplits] = useState<CustomSplit[] | null>(null);
+  const [nextId, setNextId] = useState(2);
 
   const [omitN, setOmitN] = useState(1);
   const [rankBy, setRankBy] = useState<'strategy' | 'spy'>('strategy');
 
-  const costs: CostConfig = useMemo(() => ({ capital, commission, slippageBps }), [capital, commission, slippageBps]);
+  const [extended, setExtended] = useState<ExtendedData | null>(null);
+  const [extLoading, setExtLoading] = useState(true);
+  const [extError, setExtError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  // Corrida unica 2018-2025 (sin Live) -- base de las pruebas de años y costos.
-  const full = useMemo(
-    () => evaluatePeriod(sectorMetricsFull, spyBars, runStrategy, lookbackDays, ROBUSTNESS_START, ROBUSTNESS_END, costs),
-    [sectorMetricsFull, spyBars, runStrategy, lookbackDays, costs]
+  useEffect(() => {
+    let alive = true;
+    setExtLoading(true);
+    setExtError(null);
+    loadExtended()
+      .then((d) => alive && setExtended(d))
+      .catch((e) => alive && setExtError(e instanceof Error ? e.message : 'Error desconocido'))
+      .finally(() => alive && setExtLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [reloadKey]);
+
+  // Recorte estricto: todos los ETFs + SPY desde la misma fecha, solo
+  // datos reales, mismas fechas para todos (ver prepareCommonData). Sin
+  // respaldo con los datos de la pestana principal: esos incluyen tamaño
+  // rellenado hacia atras (ene-sep 2018) y el ancla en vivo de hoy.
+  const prepared = useMemo(
+    () =>
+      extended
+        ? prepareCommonData(extended.priceBars, extended.sizeSeries, extended.liveSizeAnchorDates ?? {}, SECTOR_ETFS, BENCHMARK, ROBUSTNESS_END)
+        : null,
+    [extended]
   );
 
-  const customInvalid = custom.isTo < custom.isFrom || custom.oosTo < custom.oosFrom;
-  const customOverlap = !customInvalid && custom.isFrom <= custom.oosTo && custom.oosFrom <= custom.isTo;
+  // Mismas formulas que la pestana principal (computeAllSectorsDensity,
+  // buildMarketRegimeMap), sobre los datos ya recortados.
+  const sectorMetrics = useMemo<Record<string, DensityRow[]>>(() => {
+    if (!prepared || !prepared.commonStart) return {};
+    const bars: Record<string, PriceBar[]> = {};
+    for (const t of SECTOR_ETFS) bars[t] = prepared.priceBars[t];
+    return computeAllSectorsDensity(bars, prepared.sizeSeries, freeFloatRatio, rollingWindow);
+  }, [prepared, freeFloatRatio, rollingWindow]);
+  const spyBars = useMemo(() => prepared?.priceBars[BENCHMARK] ?? [], [prepared]);
+  const regimeMap = useMemo(() => buildMarketRegimeMap(spyBars), [spyBars]);
+
+  const ctx = useMemo(
+    () => createContext(sectorMetrics, spyBars, runStrategy, regimeMap, prefixReuse),
+    [sectorMetrics, spyBars, runStrategy, regimeMap, prefixReuse]
+  );
+  const usableStart = useMemo(() => firstUsableDate(sectorMetrics), [sectorMetrics]);
+  const rangeStart = usableStart ?? ROBUSTNESS_END;
+  const ready = usableStart !== null;
+  const customSplits = useMemo(() => customSplitsState ?? [defaultCustom(1, rangeStart)], [customSplitsState, rangeStart]);
+  const lastYear = Number(ROBUSTNESS_END.slice(0, 4));
+  const rangeLabel = `${rangeStart} a ${ROBUSTNESS_END}`;
+
+  const costs: CostConfig = useMemo(() => ({ capital, commission, slippageBps }), [capital, commission, slippageBps]);
+
+  // Corrida unica sobre todo el rango (sin Live) -- base de las pruebas de años y costos.
+  const full = useMemo(() => evaluatePeriod(ctx, lookbackDays, rangeStart, ROBUSTNESS_END, costs), [ctx, lookbackDays, rangeStart, costs]);
+
+  const customChecks = useMemo(
+    () => customSplits.map((c) => ({ split: c, issue: customSplitIssue(c, rangeStart, ROBUSTNESS_END), overlap: customSplitOverlaps(c) })),
+    [customSplits, rangeStart]
+  );
 
   const splitResults = useMemo(() => {
-    if (subTab !== 'windows') return [];
-    if (scheme === 'custom' && customInvalid) return [];
-    const splits = buildSplits(scheme, custom);
-    return evaluateSplits(splits, sectorMetricsFull, spyBars, runStrategy, lookbackDays, costs, optimizeLookback);
-  }, [subTab, scheme, custom, customInvalid, sectorMetricsFull, spyBars, runStrategy, lookbackDays, costs, optimizeLookback]);
+    if (subTab !== 'windows' || !ready) return [];
+    const splits =
+      scheme === 'custom'
+        ? customChecks.filter((c) => c.issue === null).map((c) => customToSplitDef(c.split))
+        : buildSplits(scheme, rangeStart, lastYear);
+    return evaluateSplits(splits, ctx, lookbackDays, costs, optimizeLookback);
+  }, [subTab, ready, scheme, customChecks, rangeStart, lastYear, ctx, lookbackDays, costs, optimizeLookback]);
 
   const splitSummary = useMemo(() => {
     const valid = splitResults.filter((r) => r.oos.net && r.oos.spy);
@@ -120,14 +228,95 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
     return { byCommission, matrix, breakEven };
   }, [subTab, full, capital, slippageBps]);
 
+  const updateCustom = (id: number, field: keyof Omit<CustomSplit, 'id'>, value: string) =>
+    setCustomSplits(customSplits.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
+  const addCustom = (random: boolean, count = 1) => {
+    const created: CustomSplit[] = [];
+    for (let i = 0; i < count; i++) {
+      const id = nextId + i;
+      created.push(
+        random
+          ? randomSplit(id, rangeStart, ROBUSTNESS_END)
+          : defaultCustom(id, rangeStart)
+      );
+    }
+    setNextId((n) => n + count);
+    setCustomSplits([...customSplits, ...created]);
+  };
+
+  if (extLoading) {
+    return (
+      <div className="py-16 text-center text-[11px] font-mono text-ink/40">
+        Descargando historial completo ({EXTENDED_FETCH_FROM} a hoy) de 13 ETFs + SPY desde Yahoo Finance...
+      </div>
+    );
+  }
+
+  if (extError || !prepared || !ready) {
+    return (
+      <div className="py-12 text-center space-y-3 text-[11px] font-mono">
+        <div className="text-danger">
+          {extError
+            ? `No se pudo descargar el historial (${extError}).`
+            : prepared && !prepared.commonStart
+              ? `Sin datos reales completos para: ${prepared.limiting.join(', ')}. No se calcula nada con datos incompletos.`
+              : 'Sin rango comun con ICD calculado para todos los ETFs.'}
+        </div>
+        <button
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="px-4 py-1.5 rounded border border-accent/30 text-accent bg-accent/10 hover:bg-accent/20 text-[10px] uppercase tracking-widest"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="text-[9px] font-mono text-ink/45 leading-relaxed">
         Laboratorio de pruebas aparte: NO modifica las ventanas Backtest/Validacion/Live ni ningun resultado de las otras pestanas. Usa la
         metodologia activa de la barra lateral (<b className="text-ink/70">{methodLabel}</b>, lookback {lookbackDays}d) sobre datos{' '}
-        {ROBUSTNESS_START} a {ROBUSTNESS_END} (excluye la ventana Live / año en curso). Metricas sobre grilla diaria de trading de SPY
+        <b className="text-ink/70">{rangeLabel}</b> (excluye la ventana Live / año en curso). Metricas sobre grilla diaria de trading de SPY
         (dias sin posicion = retorno 0, Sharpe anualizado con 252).
       </div>
+      <details className="border border-border rounded-lg px-4 py-3 text-[10px] font-mono text-ink/60">
+        <summary className="cursor-pointer text-ink/70">
+          Cobertura de datos: inicio comun {prepared.commonStart} (fijado por {prepared.limiting.join(', ')}) · modelo operativo desde{' '}
+          {rangeStart} · {prepared.droppedDates.length} fechas descartadas por faltar en algun ticker
+        </summary>
+        <div className="mt-3 space-y-2">
+          <table className="w-full text-[10px] font-mono">
+            <thead>
+              <tr className="text-ink/50 border-b border-border">
+                <th className="text-left py-1.5 px-2">Ticker</th>
+                <th className="text-right py-1.5 px-2">Primer precio/volumen (Yahoo)</th>
+                <th className="text-right py-1.5 px-2">Primer tamaño real (EDGAR)</th>
+                <th className="text-right py-1.5 px-2">Datos completos desde</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prepared.coverage.map((c) => (
+                <tr key={c.ticker} className={cn('border-b border-border/40', prepared.limiting.includes(c.ticker) && 'text-accent')}>
+                  <td className="py-1.5 px-2">{c.ticker}</td>
+                  <td className="text-right py-1.5 px-2">{c.firstPrice ?? '—'}</td>
+                  <td className="text-right py-1.5 px-2">{c.ticker === BENCHMARK ? 'no aplica' : c.firstSize ?? '—'}</td>
+                  <td className="text-right py-1.5 px-2">{c.firstComplete ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[9px] text-ink/40 leading-relaxed">
+            Regla: el modelo arranca solo cuando los 13 ETFs y SPY tienen TODOS sus insumos reales (cierre ajustado y volumen de Yahoo + tamaño
+            de fondo de SEC EDGAR). Nada se rellena hacia atras ni se interpola: antes de {prepared.commonStart} no se usa ningun dato, todos
+            los ETFs rotan desde el mismo dia, y si a un ticker le falta un dia ese dia se descarta para todos. Se descarta el tamaño "en vivo"
+            de hoy (dato futuro para el periodo historico); entre anclas EDGAR se mantiene el ultimo valor real ya publicado. Las medias moviles
+            (ICD {rollingWindow}d, vol. de precio, regimen de SPY) arrancan en {prepared.commonStart} -- por eso el modelo opera desde{' '}
+            {rangeStart}, cuando todos los ETFs ya tienen ICD. Para extender el rango hacia atras habria que conseguir anclas EDGAR reales mas
+            viejas y/o sacar del universo los ETFs mas nuevos.
+          </p>
+        </div>
+      </details>
 
       {/* Costos globales -- aplican a TODAS las pruebas */}
       <section className="border border-border rounded-lg p-4 space-y-3">
@@ -156,7 +345,7 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
         </p>
         {full.net && full.net.totalReturnPct <= -99.9 && (
           <p className="text-[10px] font-mono text-danger">
-            Con {fmtUsd(capital)} y ${commission.toFixed(2)}/tx la cuenta queda en cero {ROBUSTNESS_START.slice(0, 4)}-{ROBUSTNESS_END.slice(0, 4)}:
+            Con {fmtUsd(capital)} y ${commission.toFixed(2)}/tx la cuenta queda en cero en {rangeLabel}:
             las comisiones ({full.net.transactions} transacciones) se comen todo el capital. Los años posteriores a la ruina cuentan como 0%.
           </p>
         )}
@@ -196,17 +385,49 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
           </div>
 
           {scheme === 'custom' && (
-            <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono text-ink/60">
-              <span>IS</span>
-              <YearSelect value={custom.isFrom} onChange={(v) => setCustom((c) => ({ ...c, isFrom: v }))} />
-              <span>a</span>
-              <YearSelect value={custom.isTo} onChange={(v) => setCustom((c) => ({ ...c, isTo: v }))} />
-              <span className="ml-4">OOS</span>
-              <YearSelect value={custom.oosFrom} onChange={(v) => setCustom((c) => ({ ...c, oosFrom: v }))} />
-              <span>a</span>
-              <YearSelect value={custom.oosTo} onChange={(v) => setCustom((c) => ({ ...c, oosTo: v }))} />
-              {customInvalid && <span className="text-danger">Rango invalido (fin antes que inicio).</span>}
-              {customOverlap && <span className="text-amber-500">IS y OOS se superponen: el OOS no es independiente.</span>}
+            <div className="space-y-2">
+              {customChecks.map(({ split: c, issue, overlap }, idx) => (
+                <div key={c.id} className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-ink/60">
+                  <span className="text-ink/40 w-5">#{idx + 1}</span>
+                  <span>IS</span>
+                  <DateInput value={c.isStart} min={rangeStart} max={ROBUSTNESS_END} onChange={(v) => updateCustom(c.id, 'isStart', v)} />
+                  <span>a</span>
+                  <DateInput value={c.isEnd} min={rangeStart} max={ROBUSTNESS_END} onChange={(v) => updateCustom(c.id, 'isEnd', v)} />
+                  <span className="ml-3">OOS</span>
+                  <DateInput value={c.oosStart} min={rangeStart} max={ROBUSTNESS_END} onChange={(v) => updateCustom(c.id, 'oosStart', v)} />
+                  <span>a</span>
+                  <DateInput value={c.oosEnd} min={rangeStart} max={ROBUSTNESS_END} onChange={(v) => updateCustom(c.id, 'oosEnd', v)} />
+                  <button
+                    onClick={() => setCustomSplits(customSplits.filter((x) => x.id !== c.id))}
+                    className="px-2 py-1 rounded border border-border hover:border-danger/50 hover:text-danger"
+                    title="Quitar split"
+                  >
+                    Quitar
+                  </button>
+                  {issue && <span className="text-danger">{issue}</span>}
+                  {!issue && overlap && <span className="text-amber-500">IS y OOS se superponen: el OOS no es independiente.</span>}
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: '+ Agregar split', onClick: () => addCustom(false) },
+                  { label: '+ Split aleatorio', onClick: () => addCustom(true) },
+                  { label: '+ 5 aleatorios', onClick: () => addCustom(true, 5) },
+                  { label: 'Limpiar', onClick: () => setCustomSplits([]) },
+                ].map((b) => (
+                  <button
+                    key={b.label}
+                    onClick={b.onClick}
+                    className="px-3 py-1.5 rounded border border-border text-[10px] font-mono text-ink/70 hover:border-accent/40 hover:text-accent"
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] font-mono text-ink/40">
+                Fechas libres entre {rangeStart} y {ROBUSTNESS_END}. Aleatorio: IS de 2 a 6 años y OOS de 6 meses a 3 años, sin superponerse (70%
+                OOS despues del IS, 30% antes). Los splits con error no se calculan.
+              </p>
             </div>
           )}
 
@@ -291,7 +512,7 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
           <div className="flex flex-wrap items-center gap-4 text-[10px] font-mono text-ink/60">
             <div className="flex items-center gap-2">
               <span>Años a omitir (N):</span>
-              {[1, 2, 3].map((n) => (
+              {[1, 2, 3, 5].map((n) => (
                 <button
                   key={n}
                   onClick={() => setOmitN(n)}
@@ -396,7 +617,8 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
             </div>
           </div>
           <p className="text-[9px] font-mono text-ink/40">
-            Una sola simulacion continua {ROBUSTNESS_START} a {ROBUSTNESS_END} (no encadenada por ventanas). Los retornos diarios de los años
+            Una sola simulacion continua {rangeLabel} (no encadenada por ventanas). Solo entran años con al menos {MIN_YEAR_DAYS} dias de
+            trading (un primer año parcial de pocas semanas distorsionaria el ranking). Los retornos diarios de los años
             que quedan se cosen uno tras otro y se recalculan CAGR (252 dias/año), Sharpe, MaxDD y Calmar. SPY se recorta con los MISMOS años
             omitidos, para comparar en igualdad de condiciones. N se limita para dejar siempre al menos 2 años en el escenario sin mejores ni
             peores. Si el alpha se sostiene sin los mejores años, el resultado no depende de unos pocos años excepcionales.
@@ -427,8 +649,7 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
 
           <div>
             <div className="text-[9px] font-mono uppercase tracking-widest text-ink/40 mb-1.5">
-              Degradacion por nivel de comision (capital {fmtUsd(capital)}, slippage {slippageBps} bps, {ROBUSTNESS_START.slice(0, 4)}-
-              {ROBUSTNESS_END.slice(0, 4)})
+              Degradacion por nivel de comision (capital {fmtUsd(capital)}, slippage {slippageBps} bps, {rangeLabel})
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[10px] font-mono">
@@ -502,7 +723,7 @@ export default function RobustnessLab({ sectorMetricsFull, spyBars, runStrategy,
             </div>
           </div>
           <p className="text-[9px] font-mono text-ink/40">
-            Simulacion continua {ROBUSTNESS_START} a {ROBUSTNESS_END}. Verde = CAGR neto supera a SPY buy&amp;hold (sin costos) en el mismo
+            Simulacion continua {rangeLabel}. Verde = CAGR neto supera a SPY buy&amp;hold (sin costos) en el mismo
             periodo. Break-even = comision por transaccion a la que el CAGR neto iguala al de SPY con el capital elegido. La comision fija en USD
             se descuenta del valor de la cuenta en cada compra y venta; el slippage se aplica como porcentaje del valor operado.
           </p>
@@ -548,15 +769,16 @@ function RangeInput({
   );
 }
 
-function YearSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function DateInput({ value, min, max, onChange }: { value: string; min: string; max: string; onChange: (v: string) => void }) {
   return (
-    <select value={value} onChange={(e) => onChange(Number(e.target.value))} className="bg-surface border border-border rounded px-2 py-1 text-[10px] font-mono text-ink">
-      {ROBUSTNESS_YEARS.map((y) => (
-        <option key={y} value={y}>
-          {y}
-        </option>
-      ))}
-    </select>
+    <input
+      type="date"
+      value={value}
+      min={min}
+      max={max}
+      onChange={(e) => onChange(e.target.value)}
+      className="bg-surface border border-border rounded px-2 py-1 text-[10px] font-mono text-ink"
+    />
   );
 }
 

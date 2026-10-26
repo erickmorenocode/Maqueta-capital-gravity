@@ -5,8 +5,9 @@
  * simulate*Strategy existentes y las re-evalua bajo:
  *
  *  1. Ventanas In-Sample / Out-of-Sample alternativas (walk-forward
- *     rodante, anclado, inverso y personalizado) sobre 2018-2025, sin la
- *     ventana Live (año en curso).
+ *     rodante, anclado, inverso y personalizado por fechas) sobre el
+ *     periodo en que TODOS los ETFs tienen datos reales completos (ver
+ *     prepareCommonData) hasta 2025, sin la ventana Live (año en curso).
  *  2. Omision de los mejores / peores años calendario.
  *  3. Costos de transaccion: comision fija en USD por transaccion (compra
  *     o venta) sobre un capital inicial dado, mas slippage opcional en bps.
@@ -19,14 +20,219 @@
  * la curva -- las comparaciones validas son DENTRO de esta pestana.
  */
 
-import type { DensityRow, EquityPoint, PriceBar, Trade } from './engine';
+import type { DensityRow, EquityPoint, MarketRegime, PriceBar, SizeAnchor, Trade } from './engine';
 
+/**
+ * Desde donde se piden precios a Yahoo para esta pestana: todo el
+ * historial que exista. Precios reales disponibles (verificado contra
+ * Yahoo): XLK/XLF/XLE/XLV/XLY/XLP/XLI/XLB/XLU desde 1998-12-22, QQQ desde
+ * 1999-03-10, GLD desde 2004-11, XLRE desde 2015-10, XLC desde 2018-06,
+ * SPY desde 1993. El rango efectivo NO es este: prepareCommonData lo
+ * recorta a la fecha en que TODOS los ETFs tienen precio + tamaño real
+ * (hoy lo fija el ETF/ancla mas tardio). Pedir todo deja el rango listo
+ * para crecer solo si en el futuro se agregan anclas EDGAR mas viejas.
+ */
+export const EXTENDED_FETCH_FROM = '1997-01-01';
 /** Fin de los datos usados por las pruebas de robustez: excluye la ventana Live (año en curso). */
-export const ROBUSTNESS_START = '2018-01-01';
 export const ROBUSTNESS_END = '2025-12-31';
-export const ROBUSTNESS_YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
-export type RunStrategyFn = (win: Record<string, DensityRow[]>, lookbackDays: number, outTrades: Trade[]) => EquityPoint[];
+export type RunStrategyFn = (
+  win: Record<string, DensityRow[]>,
+  lookbackDays: number,
+  regimeMap: Map<string, MarketRegime>,
+  outTrades: Trade[]
+) => EquityPoint[];
+
+interface RawRun {
+  end: string;
+  curve: EquityPoint[];
+  trades: Trade[];
+}
+
+/**
+ * Datos + estrategia de una sesion de pruebas. `cache` guarda la corrida
+ * BRUTA (sin costos): cambiar comision, capital o slippage no re-simula
+ * la estrategia, solo re-aplica costos.
+ *
+ * `prefixReuse`: M2/M3/M4 son causales (cada dia solo mira datos pasados
+ * del propio recorte: ICD, vol. de precio 60d, retorno de lookback,
+ * regimen), asi que la corrida sobre [inicio, B] es identica a la de
+ * [inicio, A] hasta A, salvo la liquidacion forzada de la posicion
+ * abierta en A. Con este flag, periodos con el mismo inicio se recortan
+ * de UNA sola corrida larga (truncateRun) en vez de re-simular -- lo que
+ * vuelve viable el walk-forward anclado optimizado sobre 25+ años. M1
+ * (tenencia fija) NO es prefijo-seguro: en un recorte corto descarta el
+ * ultimo trade si no le alcanzan los dias de tenencia, en vez de cerrarlo
+ * al final -- por eso se desactiva para M1.
+ */
+export interface RobustnessContext {
+  sectorMetrics: Record<string, DensityRow[]>;
+  spyBars: PriceBar[];
+  run: RunStrategyFn;
+  regimeMap: Map<string, MarketRegime>;
+  prefixReuse: boolean;
+  cache: Map<string, RawRun>;
+}
+
+export function createContext(
+  sectorMetrics: Record<string, DensityRow[]>,
+  spyBars: PriceBar[],
+  run: RunStrategyFn,
+  regimeMap: Map<string, MarketRegime>,
+  prefixReuse: boolean
+): RobustnessContext {
+  return { sectorMetrics, spyBars, run, regimeMap, prefixReuse, cache: new Map() };
+}
+
+/**
+ * Recorta una corrida larga a `end`: mismos puntos de equity hasta `end`
+ * y la posicion abierta en `end` se cierra al ultimo valor marcado a
+ * mercado (equivalente a la liquidacion forzada que hace la propia
+ * estrategia al final de un recorte).
+ */
+function truncateRun(raw: RawRun, end: string): RawRun {
+  const curve = raw.curve.filter((p) => p.date <= end);
+  const trades: Trade[] = [];
+  const lastPoint = curve[curve.length - 1];
+  for (const t of raw.trades) {
+    if (t.exitDate <= end) {
+      trades.push(t);
+    } else if (t.entryDate <= end && lastPoint) {
+      const entryPoint = curve.find((p) => p.date === t.entryDate && p.value > 0);
+      if (!entryPoint) continue;
+      const exitPrice = t.entryPrice * (lastPoint.value / entryPoint.value);
+      trades.push({ ...t, exitDate: lastPoint.date, exitPrice, returnPct: (exitPrice / t.entryPrice - 1) * 100 });
+    }
+  }
+  return { end, curve: curve.length >= 2 ? curve : [], trades };
+}
+
+function getRawRun(ctx: RobustnessContext, lookbackDays: number, start: string, end: string, runTo?: string): RawRun {
+  if (!ctx.prefixReuse) {
+    const key = `${lookbackDays}|${start}|${end}`;
+    let raw = ctx.cache.get(key);
+    if (!raw) {
+      const trades: Trade[] = [];
+      raw = { end, curve: ctx.run(sliceAll(ctx.sectorMetrics, start, end), lookbackDays, ctx.regimeMap, trades), trades };
+      ctx.cache.set(key, raw);
+    }
+    return raw;
+  }
+  const key = `${lookbackDays}|${start}`;
+  let raw = ctx.cache.get(key);
+  if (!raw || raw.end < end) {
+    const to = runTo && runTo > end ? runTo : end;
+    const trades: Trade[] = [];
+    raw = { end: to, curve: ctx.run(sliceAll(ctx.sectorMetrics, start, to), lookbackDays, ctx.regimeMap, trades), trades };
+    ctx.cache.set(key, raw);
+  }
+  return raw.end === end ? raw : truncateRun(raw, end);
+}
+
+// ─── Datos con cobertura comun (sin datos inventados) ──────────────────
+
+export interface TickerCoverage {
+  ticker: string;
+  /** Primer cierre/volumen real de Yahoo. */
+  firstPrice: string | null;
+  /** Primera ancla REAL de tamaño de fondo (SEC EDGAR), sin el punto en vivo. */
+  firstSize: string | null;
+  /** max(firstPrice, firstSize): desde aca el ticker tiene TODOS sus insumos reales. */
+  firstComplete: string | null;
+}
+
+export interface PreparedData {
+  coverage: TickerCoverage[];
+  /** Fecha desde la que TODOS los ETFs + SPY tienen todos sus insumos reales. null si alguno no tiene datos. */
+  commonStart: string | null;
+  /** Ticker(s) que fijan commonStart (el de cobertura mas tardia). */
+  limiting: string[];
+  /** Barras recortadas a [commonStart, end] y a las fechas que tienen TODOS los tickers. */
+  priceBars: Record<string, PriceBar[]>;
+  /** Solo anclas historicas reales con fecha <= end (sin el punto en vivo de hoy). */
+  sizeSeries: Record<string, SizeAnchor[]>;
+  /** Fechas descartadas porque al menos un ticker no tenia barra ese dia. */
+  droppedDates: string[];
+}
+
+/**
+ * Prepara los datos de la pestana de robustez con una regla estricta: el
+ * modelo arranca recien cuando TODOS los ETFs del universo (y SPY) tienen
+ * todos sus insumos reales -- cierre y volumen de Yahoo + ancla real de
+ * tamaño (EDGAR). Antes de esa fecha no se usa nada:
+ *  - ningun ETF entra "tarde" al universo (todos rotan desde el mismo dia);
+ *  - no se rellena hacia atras el tamaño de fondo (sizeAt usaria la
+ *    primera ancla para fechas anteriores a ella -- valor que todavia no
+ *    existia);
+ *  - se descarta el ancla "en vivo" (tamaño de HOY fechado despues de la
+ *    ultima ancla EDGAR), que aplicaria un dato futuro al periodo
+ *    historico; despues de la ultima ancla real se hace forward-fill del
+ *    ultimo valor real conocido (dato ya publicado en esa fecha);
+ *  - solo se usan fechas en que TODOS los tickers tienen barra (si a uno
+ *    le falta un dia, ese dia se descarta para todos, nunca se interpola);
+ *  - las medias moviles (ICD, vol. de precio, regimen de SPY) se calculan
+ *    solo con datos desde commonStart, sin historia previa de otros
+ *    insumos.
+ * Insumos del modelo: close (ajustado) y volume de Yahoo, marketCap y
+ * sharesOutstanding de EDGAR. open/high/low no entran en ningun calculo.
+ * El free float sigue siendo shares x proxy de la barra lateral (parametro
+ * del modelo, no un dato).
+ */
+export function prepareCommonData(
+  priceBars: Record<string, PriceBar[]>,
+  sizeSeries: Record<string, SizeAnchor[]>,
+  liveSizeAnchorDates: Record<string, string>,
+  etfs: readonly string[],
+  benchmark: string,
+  end: string
+): PreparedData {
+  const realSize: Record<string, SizeAnchor[]> = {};
+  for (const t of etfs) {
+    const live = liveSizeAnchorDates[t];
+    realSize[t] = (sizeSeries[t] ?? []).filter((a) => a.date !== live && a.date <= end);
+  }
+
+  const coverage: TickerCoverage[] = [...etfs, benchmark].map((t) => {
+    const firstPrice = priceBars[t]?.[0]?.date ?? null;
+    const firstSize = t === benchmark ? firstPrice : realSize[t]?.[0]?.date ?? null;
+    const firstComplete = firstPrice && firstSize ? (firstPrice > firstSize ? firstPrice : firstSize) : null;
+    return { ticker: t, firstPrice, firstSize: t === benchmark ? null : firstSize, firstComplete };
+  });
+
+  const empty = { coverage, commonStart: null, limiting: [], priceBars: {}, sizeSeries: realSize, droppedDates: [] };
+  if (coverage.some((c) => c.firstComplete === null)) {
+    return { ...empty, limiting: coverage.filter((c) => c.firstComplete === null).map((c) => c.ticker) };
+  }
+  const commonStart = coverage.map((c) => c.firstComplete as string).sort()[coverage.length - 1];
+  const limiting = coverage.filter((c) => c.firstComplete === commonStart).map((c) => c.ticker);
+
+  const tickers = [...etfs, benchmark];
+  const inRange: Record<string, PriceBar[]> = {};
+  for (const t of tickers) inRange[t] = priceBars[t].filter((b) => b.date >= commonStart && b.date <= end);
+  const dateSets = tickers.map((t) => new Set(inRange[t].map((b) => b.date)));
+  const union = new Set<string>();
+  for (const ds of dateSets) for (const d of ds) union.add(d);
+  const common = new Set([...union].filter((d) => dateSets.every((ds) => ds.has(d))));
+  const droppedDates = [...union].filter((d) => !common.has(d)).sort();
+  const aligned: Record<string, PriceBar[]> = {};
+  for (const t of tickers) aligned[t] = inRange[t].filter((b) => common.has(b.date));
+
+  return { coverage, commonStart, limiting, priceBars: aligned, sizeSeries: realSize, droppedDates };
+}
+
+/**
+ * Primera fecha en que TODOS los ETFs tienen ICD calculado (la media movil
+ * necesita `rollingWindow` dias desde commonStart) -- inicio real del
+ * rango de pruebas: desde aca la estrategia elige entre el universo
+ * completo, no entre un subconjunto.
+ */
+export function firstUsableDate(sectorMetrics: Record<string, DensityRow[]>): string | null {
+  const series = Object.values(sectorMetrics);
+  if (series.length === 0) return null;
+  const firsts = series.map((rows) => rows.find((r) => r.ICD !== null)?.date);
+  if (firsts.some((d) => d === undefined)) return null;
+  return (firsts as string[]).sort()[firsts.length - 1];
+}
 
 export interface CostConfig {
   /** Capital inicial en USD -- la comision es fija en USD, asi que su impacto relativo depende del tamaño de la cuenta. */
@@ -210,16 +416,16 @@ export interface PeriodResult {
  * en `start`) y devuelve metricas bruto/neto/SPY sobre la grilla diaria.
  */
 export function evaluatePeriod(
-  sectorMetrics: Record<string, DensityRow[]>,
-  spyBars: PriceBar[],
-  run: RunStrategyFn,
+  ctx: RobustnessContext,
   lookbackDays: number,
   start: string,
   end: string,
-  costs: CostConfig
+  costs: CostConfig,
+  /** Con prefixReuse: simular de una vez hasta esta fecha (otros periodos con el mismo inicio la reutilizan). */
+  runTo?: string
 ): PeriodResult {
-  const trades: Trade[] = [];
-  const curve = run(sliceAll(sectorMetrics, start, end), lookbackDays, trades);
+  const { spyBars } = ctx;
+  const { curve, trades } = getRawRun(ctx, lookbackDays, start, end, runTo);
   const grid = tradingGrid(spyBars, start, end);
   const grossCurve = curve.length > 0 ? toDailyGrid(curve, grid) : grid.map((d) => ({ date: d, value: 1 }));
   const { curve: netCurve, totalCostUsd, transactions } = applyCosts(grossCurve, trades, costs);
@@ -253,46 +459,102 @@ export type SplitScheme = 'rolling' | 'anchored' | 'inverse' | 'custom';
 
 const y0 = (y: number) => `${y}-01-01`;
 const y1 = (y: number) => `${y}-12-31`;
+const maxDate = (a: string, b: string) => (a > b ? a : b);
 
 /**
- * Esquemas de particion sobre 2018-2025 (sin Live):
+ * Esquemas de particion sobre [firstDate, lastYear] (sin Live). Los
+ * limites se recortan a firstDate, asi el primer IS arranca donde
+ * realmente hay datos (1999 parcial) en vez de un 1-ene vacio.
  * - rolling: IS de 3 años que avanza 1 año, OOS = el año siguiente.
- * - anchored: IS siempre arranca en 2018 y se expande, OOS = año siguiente.
- * - inverse: el OOS va ANTES del IS (prueba si lo aprendido en datos
- *   recientes hubiera funcionado en el pasado -- otro regimen de mercado).
+ * - anchored: IS siempre arranca al inicio de los datos y se expande,
+ *   OOS = el año siguiente.
+ * - inverse: IS fijo en los ultimos 4 años; OOS = cada bloque de 4 años
+ *   ANTERIOR (prueba si lo aprendido en datos recientes hubiera
+ *   funcionado en cada era previa: burbuja .com, 2008, etc.).
  */
-export function buildSplits(scheme: SplitScheme, custom?: { isFrom: number; isTo: number; oosFrom: number; oosTo: number }): SplitDef[] {
+export function buildSplits(scheme: Exclude<SplitScheme, 'custom'>, firstDate: string, lastYear: number): SplitDef[] {
+  const firstYear = Number(firstDate.slice(0, 4));
+  const out: SplitDef[] = [];
   if (scheme === 'rolling') {
-    const out: SplitDef[] = [];
-    for (let oos = 2021; oos <= 2025; oos++) {
-      out.push({ label: `IS ${oos - 3}-${oos - 1} / OOS ${oos}`, isStart: y0(oos - 3), isEnd: y1(oos - 1), oosStart: y0(oos), oosEnd: y1(oos) });
+    for (let oos = firstYear + 3; oos <= lastYear; oos++) {
+      out.push({
+        label: `IS ${oos - 3}-${oos - 1} / OOS ${oos}`,
+        isStart: maxDate(y0(oos - 3), firstDate),
+        isEnd: y1(oos - 1),
+        oosStart: y0(oos),
+        oosEnd: y1(oos),
+      });
     }
-    return out;
-  }
-  if (scheme === 'anchored') {
-    const out: SplitDef[] = [];
-    for (let oos = 2020; oos <= 2025; oos++) {
-      out.push({ label: `IS 2018-${oos - 1} / OOS ${oos}`, isStart: y0(2018), isEnd: y1(oos - 1), oosStart: y0(oos), oosEnd: y1(oos) });
+  } else if (scheme === 'anchored') {
+    for (let oos = firstYear + 2; oos <= lastYear; oos++) {
+      out.push({ label: `IS ${firstYear}-${oos - 1} / OOS ${oos}`, isStart: firstDate, isEnd: y1(oos - 1), oosStart: y0(oos), oosEnd: y1(oos) });
     }
-    return out;
+  } else {
+    const isFrom = lastYear - 3;
+    for (let to = isFrom - 1; to >= firstYear; to -= 4) {
+      const from = Math.max(firstYear, to - 3);
+      out.push({
+        label: `IS ${isFrom}-${lastYear} / OOS ${from}-${to}`,
+        isStart: y0(isFrom),
+        isEnd: y1(lastYear),
+        oosStart: maxDate(y0(from), firstDate),
+        oosEnd: y1(to),
+      });
+    }
   }
-  if (scheme === 'inverse') {
-    return [
-      { label: 'IS 2022-2025 / OOS 2018-2021', isStart: y0(2022), isEnd: y1(2025), oosStart: y0(2018), oosEnd: y1(2021) },
-      { label: 'IS 2020-2025 / OOS 2018-2019', isStart: y0(2020), isEnd: y1(2025), oosStart: y0(2018), oosEnd: y1(2019) },
-      { label: 'IS 2023-2025 / OOS 2020-2022', isStart: y0(2023), isEnd: y1(2025), oosStart: y0(2020), oosEnd: y1(2022) },
-    ];
+  return out;
+}
+
+export interface CustomSplit {
+  id: number;
+  isStart: string;
+  isEnd: string;
+  oosStart: string;
+  oosEnd: string;
+}
+
+export function customSplitIssue(c: CustomSplit, minDate: string, maxDateAllowed: string): string | null {
+  const all = [c.isStart, c.isEnd, c.oosStart, c.oosEnd];
+  if (all.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d))) return 'Fecha incompleta';
+  if (all.some((d) => d < minDate || d > maxDateAllowed)) return `Fuera de rango (${minDate} a ${maxDateAllowed})`;
+  if (c.isEnd <= c.isStart || c.oosEnd <= c.oosStart) return 'Fin antes que inicio';
+  return null;
+}
+
+export function customSplitOverlaps(c: CustomSplit): boolean {
+  return c.isStart <= c.oosEnd && c.oosStart <= c.isEnd;
+}
+
+export function customToSplitDef(c: CustomSplit): SplitDef {
+  return { label: `IS ${c.isStart} a ${c.isEnd} / OOS ${c.oosStart} a ${c.oosEnd}`, isStart: c.isStart, isEnd: c.isEnd, oosStart: c.oosStart, oosEnd: c.oosEnd };
+}
+
+const DAY_MS = 86400000;
+const isoOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * Split aleatorio dentro de [minDate, maxDate]: IS de 2 a 6 años, OOS de
+ * 6 meses a 3 años, sin superponerse; el OOS cae despues del IS con
+ * probabilidad 70% y antes con 30% (variante inversa). Fechas al dia.
+ */
+export function randomSplit(id: number, minDate: string, maxDateAllowed: string, rand: () => number = Math.random): CustomSplit {
+  const lo = new Date(`${minDate}T00:00:00Z`).getTime();
+  const hi = new Date(`${maxDateAllowed}T00:00:00Z`).getTime();
+  const span = hi - lo;
+  const isLen = Math.min(span * 0.6, (2 + rand() * 4) * 365 * DAY_MS);
+  const oosLen = Math.min(span - isLen - 2 * DAY_MS, (0.5 + rand() * 2.5) * 365 * DAY_MS);
+  const slack = Math.max(0, span - isLen - oosLen - DAY_MS);
+  const offset = lo + rand() * slack;
+  if (rand() < 0.3) {
+    const oosStart = offset;
+    const oosEnd = oosStart + oosLen;
+    const isStart = oosEnd + DAY_MS;
+    return { id, oosStart: isoOf(oosStart), oosEnd: isoOf(oosEnd), isStart: isoOf(isStart), isEnd: isoOf(isStart + isLen) };
   }
-  if (!custom) return [];
-  return [
-    {
-      label: `IS ${custom.isFrom}-${custom.isTo} / OOS ${custom.oosFrom}-${custom.oosTo}`,
-      isStart: y0(custom.isFrom),
-      isEnd: y1(custom.isTo),
-      oosStart: y0(custom.oosFrom),
-      oosEnd: y1(custom.oosTo),
-    },
-  ];
+  const isStart = offset;
+  const isEnd = isStart + isLen;
+  const oosStart = isEnd + DAY_MS;
+  return { id, isStart: isoOf(isStart), isEnd: isoOf(isEnd), oosStart: isoOf(oosStart), oosEnd: isoOf(oosStart + oosLen) };
 }
 
 export interface SplitResult {
@@ -315,20 +577,29 @@ export const LOOKBACK_GRID = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
  */
 export function evaluateSplits(
   splits: SplitDef[],
-  sectorMetrics: Record<string, DensityRow[]>,
-  spyBars: PriceBar[],
-  run: RunStrategyFn,
+  ctx: RobustnessContext,
   lookbackDays: number,
   costs: CostConfig,
   optimizeLookback: boolean
 ): SplitResult[] {
+  // Fin mas lejano por fecha de inicio: los periodos que comparten inicio
+  // (IS del walk-forward anclado, p. ej.) se simulan una sola vez hasta ahi.
+  const runTo = new Map<string, string>();
+  for (const sp of splits) {
+    for (const [st, en] of [
+      [sp.isStart, sp.isEnd],
+      [sp.oosStart, sp.oosEnd],
+    ]) {
+      if ((runTo.get(st) ?? '') < en) runTo.set(st, en);
+    }
+  }
   return splits.map((split) => {
     let lookbackUsed = lookbackDays;
     let isResult: PeriodResult | null = null;
     if (optimizeLookback) {
       let bestScore = -Infinity;
       for (const lb of LOOKBACK_GRID) {
-        const r = evaluatePeriod(sectorMetrics, spyBars, run, lb, split.isStart, split.isEnd, costs);
+        const r = evaluatePeriod(ctx, lb, split.isStart, split.isEnd, costs, runTo.get(split.isStart));
         const c = r.net?.calmar;
         const score = c === null || c === undefined ? -Infinity : Number.isFinite(c) ? c : 1e6;
         if (score > bestScore) {
@@ -338,8 +609,8 @@ export function evaluateSplits(
         }
       }
     }
-    const is = isResult ?? evaluatePeriod(sectorMetrics, spyBars, run, lookbackUsed, split.isStart, split.isEnd, costs);
-    const oos = evaluatePeriod(sectorMetrics, spyBars, run, lookbackUsed, split.oosStart, split.oosEnd, costs);
+    const is = isResult ?? evaluatePeriod(ctx, lookbackUsed, split.isStart, split.isEnd, costs, runTo.get(split.isStart));
+    const oos = evaluatePeriod(ctx, lookbackUsed, split.oosStart, split.oosEnd, costs, runTo.get(split.oosStart));
     const cIs = is.net?.calmar;
     const cOos = oos.net?.calmar;
     const calmarRetention =
@@ -370,6 +641,8 @@ function dailyReturnsByYear(curve: EquityPoint[]): Map<number, number[]> {
   return out;
 }
 
+export const MIN_YEAR_DAYS = 126;
+
 const compound = (rets: number[]) => rets.reduce((v, r) => v * (1 + r), 1) - 1;
 
 export interface YearScenario {
@@ -382,7 +655,7 @@ export interface YearScenario {
 }
 
 /**
- * Corre la estrategia de corrido sobre 2018-2025 (una sola simulacion, no
+ * Corre la estrategia de corrido sobre todo el rango (una sola simulacion, no
  * encadenada por ventanas), parte los retornos diarios por año calendario
  * y arma escenarios omitiendo los N mejores / peores años. El ranking de
  * años se hace por retorno NETO de la estrategia o por retorno de SPY
@@ -397,7 +670,10 @@ export function evaluateYearOmission(
   const g = dailyReturnsByYear(full.grossCurve);
   const ne = dailyReturnsByYear(full.netCurve);
   const s = dailyReturnsByYear(full.spyCurve);
-  const yearsList = [...ne.keys()].sort((a, b) => a - b);
+  // Solo años con al menos medio año de datos (126 dias de trading): un
+  // primer año parcial de pocas semanas distorsionaria el ranking de
+  // mejores/peores años.
+  const yearsList = [...ne.keys()].filter((y) => (ne.get(y)?.length ?? 0) >= MIN_YEAR_DAYS).sort((a, b) => a - b);
   const years: YearRow[] = yearsList.map((y) => ({
     year: y,
     grossPct: compound(g.get(y) ?? []) * 100,
