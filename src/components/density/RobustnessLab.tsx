@@ -204,15 +204,13 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
     const oosCagrs = valid.map((r) => r.oos.net!.cagrPct);
     const beatsSpy = valid.filter((r) => r.oos.net!.totalReturnPct > r.oos.spy!.totalReturnPct).length;
     const positive = valid.filter((r) => r.oos.net!.totalReturnPct > 0).length;
-    const retentions = valid.map((r) => r.calmarRetention).filter((v): v is number => v !== null).sort((a, b) => a - b);
-    const medianRetention = retentions.length > 0 ? retentions[Math.floor(retentions.length / 2)] : null;
     return {
       n: valid.length,
       avgOosCagr: oosCagrs.reduce((a, b) => a + b, 0) / oosCagrs.length,
       worstOosCagr: Math.min(...oosCagrs),
       beatsSpy,
       positive,
-      medianRetention,
+      degraded: valid.filter((r) => r.degradation.kind === 'real').length,
     };
   }, [splitResults]);
 
@@ -450,9 +448,9 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
               <Card label="OOS neto > SPY" value={`${splitSummary.beatsSpy} / ${splitSummary.n}`} />
               <Card label="OOS neto positivo" value={`${splitSummary.positive} / ${splitSummary.n}`} />
               <Card
-                label="Retencion Calmar (mediana OOS/IS)"
-                value={splitSummary.medianRetention === null ? '—' : `${(splitSummary.medianRetention * 100).toFixed(0)}%`}
-                toneValue={splitSummary.medianRetention === null ? null : splitSummary.medianRetention - 0.8}
+                label="Splits con degradacion real"
+                value={`${splitSummary.degraded} / ${splitSummary.n}`}
+                toneValue={splitSummary.degraded > 0 ? -1 : 1}
               />
             </div>
           )}
@@ -474,7 +472,7 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
                   <th className="text-right py-2 px-2">OOS Calmar</th>
                   <th className="text-right py-2 px-2">Trades OOS</th>
                   <th className="text-right py-2 px-2">Costo OOS</th>
-                  <th className="text-right py-2 px-2">Retencion</th>
+                  <th className="text-left py-2 px-2">Diagnostico</th>
                 </tr>
               </thead>
               <tbody>
@@ -493,8 +491,8 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
                     <td className="text-right py-2 px-2">{fmtNum(r.oos.net?.calmar)}</td>
                     <td className="text-right py-2 px-2">{r.oos.net?.trades ?? '—'}</td>
                     <td className="text-right py-2 px-2 text-ink/60">{r.oos.net ? fmtUsd(r.oos.net.totalCostUsd) : '—'}</td>
-                    <td className={cn('text-right py-2 px-2', r.calmarRetention === null ? '' : r.calmarRetention >= 0.8 ? 'text-emerald-500' : 'text-red-500')}>
-                      {r.calmarRetention === null ? '—' : `${(r.calmarRetention * 100).toFixed(0)}%`}
+                    <td className={cn('py-2 px-2 min-w-[220px]', r.degradation.kind === 'real' ? 'text-red-500' : 'text-ink/40')}>
+                      {r.degradation.comment}
                     </td>
                   </tr>
                 ))}
@@ -504,8 +502,9 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
           </div>
           <p className="text-[9px] font-mono text-ink/40">
             Retornos = retorno total del periodo. Cada periodo se simula SOLO con sus propios datos (la estrategia arranca de cero al inicio,
-            igual que las ventanas originales). Retencion = Calmar neto OOS / Calmar neto IS; verde si &gt;= 80% (mismo umbral que la Robustez
-            Calmar de la pestana principal). "—" cuando el Calmar IS es &lt;= 0 o infinito (no comparable).
+            igual que las ventanas originales). Diagnostico: se marca degradacion real solo si el OOS (neto) falla en resultado -- pierde o
+            queda bajo SPY -- Y ademas empeora frente a su propio IS: Sharpe o Calmar &lt; 50% del IS, o MaxDD &gt; 1.5x el del IS. Una sola de
+            las dos puede ser un mercado dificil o ruido de ventana corta; vacio = sin degradacion real.
           </p>
         </div>
       )}

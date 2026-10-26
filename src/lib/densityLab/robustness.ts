@@ -609,8 +609,48 @@ export interface SplitResult {
   lookbackUsed: number;
   is: PeriodResult;
   oos: PeriodResult;
-  /** Calmar neto OOS / Calmar neto IS -- 1.0 = sin degradacion. null si no es comparable. */
-  calmarRetention: number | null;
+  degradation: DegradationVerdict;
+}
+
+export interface DegradationVerdict {
+  /** 'real': el OOS falla Y empeora frente a su propio IS. 'none': no se cumplen ambas. 'na': IS sin ventaja o sin datos. */
+  kind: 'real' | 'none' | 'na';
+  /** Comentario legible: motivos de la degradacion, o por que no aplica. */
+  comment: string;
+}
+
+/**
+ * Degradacion "real" del modelo = se cumplen DOS cosas a la vez en el OOS
+ * (metricas netas de costos):
+ *  A. Resultado malo: retorno neto <= 0, o por debajo de SPY en el mismo
+ *     periodo.
+ *  B. Peor que su propio IS: Sharpe OOS < 50% del IS, Calmar OOS < 50% del
+ *     IS, o MaxDD OOS > 1.5x el del IS.
+ * Solo A puede ser un mercado dificil que el IS tampoco habria superado;
+ * solo B puede ser ruido de una ventana corta con resultado igual bueno.
+ * Si el IS no tiene ventaja (Calmar neto <= 0) no hay nada que degradar.
+ */
+export function assessDegradation(is: PeriodResult, oos: PeriodResult): DegradationVerdict {
+  const i = is.net;
+  const o = oos.net;
+  if (!i || !o || !oos.spy) return { kind: 'na', comment: 'Sin datos suficientes' };
+  if (i.calmar === null || i.calmar <= 0) return { kind: 'na', comment: 'IS sin ventaja (Calmar <= 0): no hay que degradar' };
+
+  const outcome: string[] = [];
+  if (o.totalReturnPct <= 0) outcome.push(`OOS pierde ${o.totalReturnPct.toFixed(1)}%`);
+  else if (o.totalReturnPct < oos.spy.totalReturnPct)
+    outcome.push(`OOS ${o.totalReturnPct.toFixed(1)}% bajo SPY ${oos.spy.totalReturnPct.toFixed(1)}%`);
+
+  const vsIs: string[] = [];
+  if (i.sharpe !== null && i.sharpe > 0 && (o.sharpe === null || o.sharpe < 0.5 * i.sharpe))
+    vsIs.push(`Sharpe ${i.sharpe.toFixed(2)} -> ${o.sharpe === null ? '—' : o.sharpe.toFixed(2)}`);
+  if (Number.isFinite(i.calmar) && (o.calmar === null || o.calmar < 0.5 * i.calmar))
+    vsIs.push(`Calmar ${i.calmar.toFixed(2)} -> ${o.calmar === null ? '—' : o.calmar.toFixed(2)}`);
+  if (i.maxDrawdownPct > 0 && o.maxDrawdownPct > 1.5 * i.maxDrawdownPct)
+    vsIs.push(`MaxDD ${i.maxDrawdownPct.toFixed(1)}% -> ${o.maxDrawdownPct.toFixed(1)}%`);
+
+  if (outcome.length > 0 && vsIs.length > 0) return { kind: 'real', comment: `Degradacion real: ${[...outcome, ...vsIs].join(' · ')}` };
+  return { kind: 'none', comment: '' };
 }
 
 export const LOOKBACK_GRID = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -657,13 +697,7 @@ export function evaluateSplits(
     }
     const is = isResult ?? evaluatePeriod(ctx, lookbackUsed, split.isStart, split.isEnd, costs, runTo.get(split.isStart));
     const oos = evaluatePeriod(ctx, lookbackUsed, split.oosStart, split.oosEnd, costs, runTo.get(split.oosStart));
-    const cIs = is.net?.calmar;
-    const cOos = oos.net?.calmar;
-    const calmarRetention =
-      cIs !== null && cIs !== undefined && cOos !== null && cOos !== undefined && Number.isFinite(cIs) && Number.isFinite(cOos) && cIs > 0
-        ? cOos / cIs
-        : null;
-    return { split, lookbackUsed, is, oos, calmarRetention };
+    return { split, lookbackUsed, is, oos, degradation: assessDegradation(is, oos) };
   });
 }
 
