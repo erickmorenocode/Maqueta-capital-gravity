@@ -90,6 +90,12 @@ export interface SizeAnchor {
   filed?: string;
 }
 
+/** Split de Yahoo Finance: `ratio` = acciones nuevas por cada accion vieja (2 = split 2:1). */
+export interface SplitEvent {
+  date: string;
+  ratio: number;
+}
+
 /**
  * Ancla de tamano vigente en `date`: la mas reciente con date <= la
  * pedida (forward-fill). Si `date` es anterior a la primera ancla

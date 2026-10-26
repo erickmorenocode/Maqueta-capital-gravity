@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { SECTOR_ETFS, BENCHMARK, BACKTEST_START, type PriceBar, type SizeAnchor, type TickerStaticInfo } from '@/src/lib/densityLab/engine';
-import { downloadPriceHistory, fetchTickerStaticInfo } from '@/src/lib/densityLab/dataFetch';
+import { SECTOR_ETFS, BENCHMARK, BACKTEST_START, type PriceBar, type SizeAnchor, type SplitEvent, type TickerStaticInfo } from '@/src/lib/densityLab/engine';
+import { downloadPriceHistoryWithSplits, fetchTickerStaticInfo } from '@/src/lib/densityLab/dataFetch';
 import historicalSizeRaw from '@/src/lib/densityLab/historicalSize.json';
 
 const historicalSize = historicalSizeRaw as Record<string, SizeAnchor[]>;
@@ -44,16 +44,21 @@ export async function GET(request: Request) {
 
   try {
     const [priceResults, staticResults] = await Promise.all([
-      Promise.all(allTickers.map((t) => downloadPriceHistory(t, from, today))),
+      Promise.all(allTickers.map((t) => downloadPriceHistoryWithSplits(t, from, today))),
       Promise.all(allTickers.map((t) => fetchTickerStaticInfo(t))),
     ]);
 
     const priceBars: Record<string, PriceBar[]> = {};
+    // Splits ya aplicados por Yahoo al volumen historico -- la pestana
+    // Pruebas de Robustez los usa para llevar las acciones de EDGAR a la
+    // misma base (ver prepareCommonData). No cambia la pestana principal.
+    const splits: Record<string, SplitEvent[]> = {};
     const missingPrice: string[] = [];
     allTickers.forEach((t, i) => {
-      const bars = priceResults[i];
+      const { bars, splits: tickerSplits } = priceResults[i];
       if (bars.length > 0) priceBars[t] = bars;
       else missingPrice.push(t);
+      splits[t] = tickerSplits;
     });
 
     const sizeSeries: Record<string, SizeAnchor[]> = {};
@@ -91,6 +96,7 @@ export async function GET(request: Request) {
       priceBars,
       sizeSeries,
       liveSizeAnchorDates,
+      splits,
       staticInfos,
       missingPrice,
       missingStatic,

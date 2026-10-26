@@ -66,12 +66,15 @@ function extractFundSizes(html) {
   let m;
   while ((m = headRe.exec(s))) idxs.push(m.index);
 
+  // Primer numero despues de la etiqueta, sin depender del tag que lo
+  // envuelve: hasta 2025 cada valor iba en su propia <TD>; desde el
+  // N-CSR de dic-2025 va en <span> con el "$" en otro <span>.
   function firstValueAfter(label, from, to) {
     const li = s.indexOf(label, from);
     if (li === -1 || li > to) return null;
-    const windowEnd = Math.min(li + 1500, to);
-    const win = s.slice(li, windowEnd);
-    const mm = />\s*\$?([\d,]+\.?\d*)\s*<\/TD>/i.exec(win);
+    const windowEnd = Math.min(li + 3000, to);
+    const win = s.slice(li + label.length, windowEnd).replace(/<[^>]+>/g, ' ').replace(/&#160;|&nbsp;/g, ' ');
+    const mm = /^[\s$|]*([\d,]+\.?\d*)/.exec(win.replace(/^\s*\)?/, ''));
     return mm ? parseFloat(mm[1].replace(/,/g, '')) : null;
   }
 
@@ -79,9 +82,12 @@ function extractFundSizes(html) {
   for (let k = 0; k < idxs.length; k++) {
     const start = idxs[k];
     const end = k + 1 < idxs.length ? idxs[k + 1] : s.length;
-    const chunk = s.slice(start, Math.min(start + 2000, end));
-    const nm = /<TD[^>]*>\s*(?:The\s+)?([A-Za-z ]*Select Sector SPDR Fund)\s*<\/TD>/i.exec(chunk);
-    const fundName = nm ? nm[1].trim() : null;
+    // Nombre del fondo: "X Select Sector SPDR Fund" (<TD>, hasta 2025) o
+    // "State Street X Select Sector SPDR ETF" (<span>, desde dic-2025,
+    // tras el cambio de nombre) -- ambos se normalizan a la clave "... Fund".
+    const chunk = s.slice(start, Math.min(start + 8000, end)).replace(/<[^>]+>/g, '|');
+    const nm = /\|\s*(?:The\s+)?(?:State Street\s+)?([A-Za-z ]*?Select Sector SPDR) (?:Fund|ETF)\s*\|/i.exec(chunk);
+    const fundName = nm ? `${nm[1].trim()} Fund` : null;
     const ticker = fundName ? FUND_TO_TICKER[fundName] : null;
     if (!ticker) continue;
 

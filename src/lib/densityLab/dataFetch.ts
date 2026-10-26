@@ -5,21 +5,22 @@
  */
 
 import { yf } from '@/src/lib/gravityEngine';
-import type { PriceBar, TickerStaticInfo } from '@/src/lib/densityLab/engine';
+import type { PriceBar, SplitEvent, TickerStaticInfo } from '@/src/lib/densityLab/engine';
 
 /**
- * Historial OHLCV diario ajustado de un ticker entre dos fechas.
- * Devuelve [] (nunca lanza) si Yahoo Finance falla -- el llamador decide
- * como degradar.
+ * Historial OHLCV diario ajustado de un ticker entre dos fechas, mas los
+ * splits que Yahoo ya aplico a ese historial (el volumen anterior a cada
+ * split viene multiplicado por su ratio). Devuelve vacio (nunca lanza) si
+ * Yahoo Finance falla -- el llamador decide como degradar.
  */
-export async function downloadPriceHistory(
+export async function downloadPriceHistoryWithSplits(
   ticker: string,
   start: string,
   end: string
-): Promise<PriceBar[]> {
+): Promise<{ bars: PriceBar[]; splits: SplitEvent[] }> {
   try {
-    const res = await yf.chart(ticker, { period1: start, period2: end, interval: '1d' });
-    return res.quotes
+    const res = await yf.chart(ticker, { period1: start, period2: end, interval: '1d', events: 'split' });
+    const bars = res.quotes
       .filter((q) => q.close !== null && q.close !== undefined && q.volume !== null && q.volume !== undefined)
       .map((q) => ({
         date: q.date.toISOString().slice(0, 10),
@@ -29,9 +30,18 @@ export async function downloadPriceHistory(
         close: (q.adjclose ?? q.close)!,
         volume: q.volume!,
       }));
+    const splits = (res.events?.splits ?? [])
+      .filter((s) => s.numerator > 0 && s.denominator > 0)
+      .map((s) => ({ date: new Date(s.date).toISOString().slice(0, 10), ratio: s.numerator / s.denominator }));
+    return { bars, splits };
   } catch {
-    return [];
+    return { bars: [], splits: [] };
   }
+}
+
+/** Solo las barras -- ver downloadPriceHistoryWithSplits. */
+export async function downloadPriceHistory(ticker: string, start: string, end: string): Promise<PriceBar[]> {
+  return (await downloadPriceHistoryWithSplits(ticker, start, end)).bars;
 }
 
 /**

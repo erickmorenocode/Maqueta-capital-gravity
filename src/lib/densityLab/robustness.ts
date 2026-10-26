@@ -7,7 +7,8 @@
  *  1. Ventanas In-Sample / Out-of-Sample alternativas (walk-forward
  *     rodante, anclado, inverso y personalizado por fechas) sobre el
  *     periodo en que TODOS los ETFs tienen datos reales completos (ver
- *     prepareCommonData) hasta 2025, sin la ventana Live (año en curso).
+ *     prepareCommonData) hasta el ultimo dia con datos (hoy). IS y OOS
+ *     de al menos MIN_SEGMENT_YEARS años en todos los esquemas.
  *  2. Omision de los mejores / peores años calendario.
  *  3. Costos de transaccion: comision fija en USD por transaccion (compra
  *     o venta) sobre un capital inicial dado, mas slippage opcional en bps.
@@ -20,7 +21,7 @@
  * la curva -- las comparaciones validas son DENTRO de esta pestana.
  */
 
-import type { DensityRow, EquityPoint, MarketRegime, PriceBar, SizeAnchor, Trade } from './engine';
+import type { DensityRow, EquityPoint, MarketRegime, PriceBar, SizeAnchor, SplitEvent, Trade } from './engine';
 
 /**
  * Desde donde se piden precios a Yahoo para esta pestana: todo el
@@ -33,8 +34,25 @@ import type { DensityRow, EquityPoint, MarketRegime, PriceBar, SizeAnchor, Trade
  * para crecer solo si en el futuro se agregan anclas EDGAR mas viejas.
  */
 export const EXTENDED_FETCH_FROM = '1997-01-01';
-/** Fin de los datos usados por las pruebas de robustez: excluye la ventana Live (año en curso). */
-export const ROBUSTNESS_END = '2025-12-31';
+/** Largo minimo de cada tramo IS y OOS, en años calendario, en todos los esquemas de particion. */
+export const MIN_SEGMENT_YEARS = 2;
+
+export function addDaysISO(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export function addYearsISO(dateStr: string, years: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.toISOString().slice(0, 10);
+}
+
+/** true si [start, end] cubre al menos MIN_SEGMENT_YEARS años calendario completos. */
+export function segmentLongEnough(start: string, end: string): boolean {
+  return end >= addDaysISO(addYearsISO(start, MIN_SEGMENT_YEARS), -1);
+}
 
 export type RunStrategyFn = (
   win: Record<string, DensityRow[]>,
@@ -147,6 +165,8 @@ export interface PreparedData {
   commonStart: string | null;
   /** Ticker(s) que fijan commonStart (el de cobertura mas tardia). */
   limiting: string[];
+  /** Ultimo dia con barra en TODOS los tickers: fin del rango de pruebas. */
+  dataEnd: string | null;
   /** Barras recortadas a [commonStart, end] y a las fechas que tienen TODOS los tickers. */
   priceBars: Record<string, PriceBar[]>;
   /** Solo anclas historicas reales con fecha <= end (sin el punto en vivo de hoy). */
@@ -155,12 +175,6 @@ export interface PreparedData {
   droppedDates: string[];
   /** Fallas del chequeo final de alineacion (ver checkAlignment). Si hay alguna, no se entrega ningun dato. */
   violations: string[];
-}
-
-function nextDayISO(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -177,6 +191,12 @@ function nextDayISO(dateStr: string): string {
  *    N-CSR de los XL* sale 61-68 dias despues del cierre, el N-30B-2 de
  *    QQQ 81-95. Usar `date` aplicaria un valor que todavia no era
  *    publico. Un ancla sin `filed` se descarta;
+ *  - las acciones de EDGAR se llevan a la base de Yahoo: Yahoo multiplica
+ *    el volumen anterior a cada split por su ratio, EDGAR reporta las
+ *    acciones del momento. Un ancla cuyo periodo cierra antes de un split
+ *    se multiplica por el ratio (p. ej. XLK/XLE/XLY/XLB/XLU 2:1 el
+ *    2025-12-05); sin esto volumen/acciones (STR, FFT) salta x2 al entrar
+ *    la primera ancla post-split. marketCap no cambia;
  *  - se descarta el ancla "en vivo" (tamaño de HOY fechado despues de la
  *    ultima ancla EDGAR), que aplicaria un dato futuro al periodo
  *    historico; despues de la ultima ancla real se hace forward-fill del
@@ -195,6 +215,7 @@ export function prepareCommonData(
   priceBars: Record<string, PriceBar[]>,
   sizeSeries: Record<string, SizeAnchor[]>,
   liveSizeAnchorDates: Record<string, string>,
+  splits: Record<string, SplitEvent[]>,
   etfs: readonly string[],
   benchmark: string,
   end: string
@@ -202,9 +223,18 @@ export function prepareCommonData(
   const realSize: Record<string, SizeAnchor[]> = {};
   for (const t of etfs) {
     const live = liveSizeAnchorDates[t];
+    const tickerSplits = splits[t] ?? [];
     realSize[t] = (sizeSeries[t] ?? [])
       .filter((a) => a.date !== live && a.filed !== undefined)
-      .map((a) => ({ ...a, date: nextDayISO(a.filed as string) }))
+      .map((a) => {
+        const factor = tickerSplits.filter((s) => s.date > a.date).reduce((f, s) => f * s.ratio, 1);
+        return {
+          ...a,
+          date: addDaysISO(a.filed as string, 1),
+          sharesOutstanding: a.sharesOutstanding * factor,
+          floatShares: a.floatShares === undefined ? undefined : a.floatShares * factor,
+        };
+      })
       .filter((a) => a.date <= end)
       .sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -216,7 +246,7 @@ export function prepareCommonData(
     return { ticker: t, firstPrice, firstSize: t === benchmark ? null : firstSize, firstComplete };
   });
 
-  const empty = { coverage, commonStart: null, limiting: [], priceBars: {}, sizeSeries: realSize, droppedDates: [], violations: [] };
+  const empty = { coverage, commonStart: null, limiting: [], dataEnd: null, priceBars: {}, sizeSeries: realSize, droppedDates: [], violations: [] };
   if (coverage.some((c) => c.firstComplete === null)) {
     return { ...empty, limiting: coverage.filter((c) => c.firstComplete === null).map((c) => c.ticker) };
   }
@@ -236,7 +266,9 @@ export function prepareCommonData(
 
   const violations = checkAlignment(aligned, realSize, commonStart, etfs, benchmark);
   if (violations.length > 0) return { ...empty, violations };
-  return { coverage, commonStart, limiting, priceBars: aligned, sizeSeries: realSize, droppedDates, violations };
+  const ref = aligned[benchmark];
+  const dataEnd = ref[ref.length - 1].date;
+  return { coverage, commonStart, limiting, dataEnd, priceBars: aligned, sizeSeries: realSize, droppedDates, violations };
 }
 
 /**
@@ -503,52 +535,51 @@ export interface SplitDef {
 
 export type SplitScheme = 'rolling' | 'anchored' | 'inverse' | 'custom';
 
-const y0 = (y: number) => `${y}-01-01`;
-const y1 = (y: number) => `${y}-12-31`;
-const maxDate = (a: string, b: string) => (a > b ? a : b);
+const splitLabel = (s: Omit<SplitDef, 'label'>): string => `IS ${s.isStart} a ${s.isEnd} / OOS ${s.oosStart} a ${s.oosEnd}`;
+const withLabel = (s: Omit<SplitDef, 'label'>): SplitDef => ({ label: splitLabel(s), ...s });
+
+/** Duracion del OOS en los esquemas fijos (= el minimo) y del IS del rodante/inverso. */
+const OOS_YEARS = MIN_SEGMENT_YEARS;
+const IS_YEARS = 3;
 
 /**
- * Esquemas de particion sobre [firstDate, lastYear] (sin Live). Los
- * limites se recortan a firstDate, asi el primer IS arranca donde
- * realmente hay datos (1999 parcial) en vez de un 1-ene vacio.
- * - rolling: IS de 3 años que avanza 1 año, OOS = el año siguiente.
- * - anchored: IS siempre arranca al inicio de los datos y se expande,
- *   OOS = el año siguiente.
- * - inverse: IS fijo en los ultimos 4 años; OOS = cada bloque de 4 años
- *   ANTERIOR (prueba si lo aprendido en datos recientes hubiera
- *   funcionado en cada era previa: burbuja .com, 2008, etc.).
+ * Esquemas de particion sobre [firstDate, lastDate], con fechas exactas
+ * contadas HACIA ATRAS desde lastDate (ultimo dia con datos): el primer
+ * split siempre termina hoy y los siguientes retroceden de a 1 año. Todo
+ * tramo IS y OOS dura al menos MIN_SEGMENT_YEARS años; un split que no
+ * cabe entero en el rango se descarta (no se recorta por debajo del
+ * minimo). Se devuelven en orden cronologico.
+ * - rolling: OOS de 2 años, IS = los 3 años inmediatamente anteriores
+ *   (el primero puede quedar recortado en firstDate si aun dura >= 2).
+ * - anchored: OOS de 2 años, IS desde firstDate hasta el dia anterior al
+ *   OOS (se expande a medida que el OOS avanza).
+ * - inverse: IS fijo en los ultimos 3 años; OOS = bloques de 2 años
+ *   ANTERIORES sin superponerse, hacia atras hasta firstDate (prueba si
+ *   lo aprendido en datos recientes hubiera funcionado en eras previas).
  */
-export function buildSplits(scheme: Exclude<SplitScheme, 'custom'>, firstDate: string, lastYear: number): SplitDef[] {
-  const firstYear = Number(firstDate.slice(0, 4));
+export function buildSplits(scheme: Exclude<SplitScheme, 'custom'>, firstDate: string, lastDate: string): SplitDef[] {
   const out: SplitDef[] = [];
-  if (scheme === 'rolling') {
-    for (let oos = firstYear + 3; oos <= lastYear; oos++) {
-      out.push({
-        label: `IS ${oos - 3}-${oos - 1} / OOS ${oos}`,
-        isStart: maxDate(y0(oos - 3), firstDate),
-        isEnd: y1(oos - 1),
-        oosStart: y0(oos),
-        oosEnd: y1(oos),
-      });
+  if (scheme === 'rolling' || scheme === 'anchored') {
+    for (let k = 0; ; k++) {
+      const oosEnd = addYearsISO(lastDate, -k);
+      const oosStart = addDaysISO(addYearsISO(oosEnd, -OOS_YEARS), 1);
+      const isEnd = addDaysISO(oosStart, -1);
+      const wantedIsStart = scheme === 'rolling' ? addDaysISO(addYearsISO(isEnd, -IS_YEARS), 1) : firstDate;
+      const isStart = wantedIsStart < firstDate ? firstDate : wantedIsStart;
+      if (oosStart < firstDate || !segmentLongEnough(isStart, isEnd)) break;
+      out.push(withLabel({ isStart, isEnd, oosStart, oosEnd }));
     }
-  } else if (scheme === 'anchored') {
-    for (let oos = firstYear + 2; oos <= lastYear; oos++) {
-      out.push({ label: `IS ${firstYear}-${oos - 1} / OOS ${oos}`, isStart: firstDate, isEnd: y1(oos - 1), oosStart: y0(oos), oosEnd: y1(oos) });
-    }
-  } else {
-    const isFrom = lastYear - 3;
-    for (let to = isFrom - 1; to >= firstYear; to -= 4) {
-      const from = Math.max(firstYear, to - 3);
-      out.push({
-        label: `IS ${isFrom}-${lastYear} / OOS ${from}-${to}`,
-        isStart: y0(isFrom),
-        isEnd: y1(lastYear),
-        oosStart: maxDate(y0(from), firstDate),
-        oosEnd: y1(to),
-      });
-    }
+    return out.reverse();
   }
-  return out;
+  const isEnd = lastDate;
+  const isStart = addDaysISO(addYearsISO(isEnd, -IS_YEARS), 1);
+  for (let oosEnd = addDaysISO(isStart, -1); ; ) {
+    const oosStart = addDaysISO(addYearsISO(oosEnd, -OOS_YEARS), 1);
+    if (oosStart < firstDate) break;
+    out.push(withLabel({ isStart, isEnd, oosStart, oosEnd }));
+    oosEnd = addDaysISO(oosStart, -1);
+  }
+  return isStart < firstDate ? [] : out.reverse();
 }
 
 export interface CustomSplit {
@@ -564,7 +595,18 @@ export function customSplitIssue(c: CustomSplit, minDate: string, maxDateAllowed
   if (all.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d))) return 'Fecha incompleta';
   if (all.some((d) => d < minDate || d > maxDateAllowed)) return `Fuera de rango (${minDate} a ${maxDateAllowed})`;
   if (c.isEnd <= c.isStart || c.oosEnd <= c.oosStart) return 'Fin antes que inicio';
+  if (!segmentLongEnough(c.isStart, c.isEnd)) return `IS menor a ${MIN_SEGMENT_YEARS} años`;
+  if (!segmentLongEnough(c.oosStart, c.oosEnd)) return `OOS menor a ${MIN_SEGMENT_YEARS} años`;
   return null;
+}
+
+/**
+ * Split personalizado por defecto: OOS = los ultimos MIN_SEGMENT_YEARS
+ * años hasta lastDate, IS = todo lo anterior desde firstDate.
+ */
+export function defaultCustomSplit(id: number, firstDate: string, lastDate: string): CustomSplit {
+  const oosStart = addDaysISO(addYearsISO(lastDate, -MIN_SEGMENT_YEARS), 1);
+  return { id, isStart: firstDate, isEnd: addDaysISO(oosStart, -1), oosStart, oosEnd: lastDate };
 }
 
 export function customSplitOverlaps(c: CustomSplit): boolean {
@@ -576,31 +618,36 @@ export function customToSplitDef(c: CustomSplit): SplitDef {
 }
 
 const DAY_MS = 86400000;
-const isoOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+const daysBetween = (a: string, b: string) => Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / DAY_MS);
+/** Dias que cubren MIN_SEGMENT_YEARS años calendario desde cualquier fecha (366 por año cubre bisiestos). */
+const MIN_SEGMENT_DAYS = MIN_SEGMENT_YEARS * 366;
 
 /**
- * Split aleatorio dentro de [minDate, maxDate]: IS de 2 a 6 años, OOS de
- * 6 meses a 3 años, sin superponerse; el OOS cae despues del IS con
- * probabilidad 70% y antes con 30% (variante inversa). Fechas al dia.
+ * Split aleatorio dentro de [minDate, maxDate]: IS y OOS de al menos
+ * MIN_SEGMENT_YEARS años cada uno, con el sobrante del rango repartido al
+ * azar (IS hasta +3 años, OOS hasta +2 años) y posicion al azar, sin
+ * superponerse; el OOS cae despues del IS con probabilidad 70% y antes
+ * con 30% (variante inversa). Fechas al dia. null si el rango no alcanza
+ * para dos tramos minimos.
  */
-export function randomSplit(id: number, minDate: string, maxDateAllowed: string, rand: () => number = Math.random): CustomSplit {
-  const lo = new Date(`${minDate}T00:00:00Z`).getTime();
-  const hi = new Date(`${maxDateAllowed}T00:00:00Z`).getTime();
-  const span = hi - lo;
-  const isLen = Math.min(span * 0.6, (2 + rand() * 4) * 365 * DAY_MS);
-  const oosLen = Math.min(span - isLen - 2 * DAY_MS, (0.5 + rand() * 2.5) * 365 * DAY_MS);
-  const slack = Math.max(0, span - isLen - oosLen - DAY_MS);
-  const offset = lo + rand() * slack;
+export function randomSplit(id: number, minDate: string, maxDateAllowed: string, rand: () => number = Math.random): CustomSplit | null {
+  const span = daysBetween(minDate, maxDateAllowed);
+  const extra = span - 2 * MIN_SEGMENT_DAYS - 1;
+  if (extra < 0) return null;
+  const isExtra = Math.floor(rand() * Math.min(extra, 3 * 365));
+  const oosExtra = Math.floor(rand() * Math.min(extra - isExtra, 2 * 365));
+  const isLen = MIN_SEGMENT_DAYS + isExtra;
+  const oosLen = MIN_SEGMENT_DAYS + oosExtra;
+  const offset = Math.floor(rand() * (span - isLen - oosLen - 1));
+  const firstStart = addDaysISO(minDate, offset);
   if (rand() < 0.3) {
-    const oosStart = offset;
-    const oosEnd = oosStart + oosLen;
-    const isStart = oosEnd + DAY_MS;
-    return { id, oosStart: isoOf(oosStart), oosEnd: isoOf(oosEnd), isStart: isoOf(isStart), isEnd: isoOf(isStart + isLen) };
+    const oosEnd = addDaysISO(firstStart, oosLen);
+    const isStart = addDaysISO(oosEnd, 1);
+    return { id, oosStart: firstStart, oosEnd, isStart, isEnd: addDaysISO(isStart, isLen) };
   }
-  const isStart = offset;
-  const isEnd = isStart + isLen;
-  const oosStart = isEnd + DAY_MS;
-  return { id, isStart: isoOf(isStart), isEnd: isoOf(isEnd), oosStart: isoOf(oosStart), oosEnd: isoOf(oosStart + oosLen) };
+  const isEnd = addDaysISO(firstStart, isLen);
+  const oosStart = addDaysISO(isEnd, 1);
+  return { id, isStart: firstStart, isEnd, oosStart, oosEnd: addDaysISO(oosStart, oosLen) };
 }
 
 export interface SplitResult {
@@ -613,8 +660,11 @@ export interface SplitResult {
 }
 
 export interface DegradationVerdict {
-  /** 'real': Calmar OOS < 80% del Calmar IS. 'none': retiene >= 80%. 'na': IS sin ventaja, infinito o sin datos. */
-  kind: 'real' | 'none' | 'na';
+  /**
+   * 'real': Calmar OOS < 80% del Calmar IS. 'none': retiene >= 80%. 'na': IS sin ventaja, infinito o sin datos.
+   * 'noncausal': lookback optimizado en un IS posterior al OOS (informacion futura) -- se excluye del resumen.
+   */
+  kind: 'real' | 'none' | 'na' | 'noncausal';
   /** Comentario legible: motivos de la degradacion, o por que no aplica. */
   comment: string;
 }
@@ -688,7 +738,14 @@ export function evaluateSplits(
     }
     const is = isResult ?? evaluatePeriod(ctx, lookbackUsed, split.isStart, split.isEnd, costs, runTo.get(split.isStart));
     const oos = evaluatePeriod(ctx, lookbackUsed, split.oosStart, split.oosEnd, costs, runTo.get(split.oosStart));
-    return { split, lookbackUsed, is, oos, degradation: assessDegradation(is, oos) };
+    // Con optimizacion, un IS posterior al OOS elige el lookback con datos
+    // del futuro del OOS: el resultado no es una prueba fuera de muestra
+    // valida. Sin optimizacion el IS no decide nada y el orden no importa.
+    const degradation: DegradationVerdict =
+      optimizeLookback && split.isStart > split.oosStart
+        ? { kind: 'noncausal', comment: 'No causal: lookback elegido en un IS posterior al OOS (informacion futura). Excluido del resumen.' }
+        : assessDegradation(is, oos);
+    return { split, lookbackUsed, is, oos, degradation };
   });
 }
 
