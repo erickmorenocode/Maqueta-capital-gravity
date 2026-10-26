@@ -18,6 +18,8 @@ export interface EquitySegment {
 interface Props {
   segments: EquitySegment[];
   benchmark: EquityPoint[];
+  /** Curva "sombra" de solo cierres realizados (sin marcar a mercado intra-tenencia) -- para comparar contra la curva real cuanto ruido intra-posicion esconde mirar solo el P&L realizado. */
+  shadowCurve?: EquityPoint[];
   boundaries?: { date: string; label: string }[];
   /** Ventana activa -- resalta su tramo y atenua los demas. */
   selectedWindow?: WindowKey;
@@ -29,17 +31,17 @@ const WIDTH = 1000;
 const HEIGHT = 340;
 const MARGIN = { top: 16, right: 20, bottom: 26, left: 50 };
 
-export default function EquityCurveChart({ segments, benchmark, boundaries = [], selectedWindow, onSelectWindow }: Props) {
+export default function EquityCurveChart({ segments, benchmark, shadowCurve = [], boundaries = [], selectedWindow, onSelectWindow }: Props) {
   const chart = useMemo(() => {
     const allPoints = segments.flatMap((s) => s.points);
     if (allPoints.length < 2) return null;
     const innerW = WIDTH - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
 
-    const dates = [...allPoints, ...benchmark].map((p) => new Date(p.date));
+    const dates = [...allPoints, ...benchmark, ...shadowCurve].map((p) => new Date(p.date));
     const xScale = d3.scaleTime().domain(d3.extent(dates) as [Date, Date]).range([0, innerW]);
 
-    const values = [...allPoints, ...benchmark].map((p) => p.value);
+    const values = [...allPoints, ...benchmark, ...shadowCurve].map((p) => p.value);
     const [min, max] = d3.extent(values) as [number, number];
     const pad = (max - min) * 0.08 || 0.05;
     const yScale = d3.scaleLinear().domain([min - pad, max + pad]).range([innerH, 0]);
@@ -90,17 +92,18 @@ export default function EquityCurveChart({ segments, benchmark, boundaries = [],
       segmentPaths,
       zones: segmentPaths.map((s, i) => ({ key: s.key, color: s.color, x: zoneEdges[i], width: zoneEdges[i + 1] - zoneEdges[i] })),
       benchmarkPath: benchmark.length >= 2 ? line(benchmark) ?? '' : '',
+      shadowPath: shadowCurve.length >= 2 ? line(shadowCurve) ?? '' : '',
       xTicks: xScale.ticks(6),
       yTicks: yScale.ticks(5),
       boundaryLines: boundaryXs,
     };
-  }, [segments, benchmark, boundaries]);
+  }, [segments, benchmark, shadowCurve, boundaries]);
 
   if (!chart) {
     return <div className="text-[11px] font-mono text-ink/40 py-12 text-center">Sin suficientes rotaciones para graficar.</div>;
   }
 
-  const { innerW, innerH, xScale, yScale, segmentPaths, zones, benchmarkPath, xTicks, yTicks, boundaryLines } = chart;
+  const { innerW, innerH, xScale, yScale, segmentPaths, zones, benchmarkPath, shadowPath, xTicks, yTicks, boundaryLines } = chart;
 
   return (
     <div>
@@ -161,6 +164,9 @@ export default function EquityCurveChart({ segments, benchmark, boundaries = [],
             <path d={benchmarkPath} fill="none" stroke="#64748b" strokeDasharray="4,3" strokeWidth={1.4} style={{ pointerEvents: 'none' }} />
           )}
 
+          {/* sombra: solo cierres realizados, sin marcar a mercado intra-tenencia -- detras de la curva real para comparar cuanto ruido esconde */}
+          {shadowPath && <path d={shadowPath} fill="none" stroke="#facc15" strokeWidth={1.6} strokeDasharray="1,2.5" opacity={0.9} style={{ pointerEvents: 'none' }} />}
+
           {segmentPaths.map((s) => {
             const dimmed = !selectedWindow || selectedWindow === s.key ? 1 : 0.5;
             return (
@@ -191,6 +197,11 @@ export default function EquityCurveChart({ segments, benchmark, boundaries = [],
         {benchmarkPath && (
           <span className="flex items-center gap-1.5 px-2 py-1">
             <span className="w-3 h-0.5 bg-[#64748b] inline-block" style={{ borderTop: '1px dashed #64748b' }} /> Buy &amp; Hold SPY
+          </span>
+        )}
+        {shadowPath && (
+          <span className="flex items-center gap-1.5 px-2 py-1">
+            <span className="w-3 h-0.5 inline-block" style={{ borderTop: '1.5px dotted #facc15' }} /> Solo cierres realizados (sin marcar a mercado)
           </span>
         )}
       </div>

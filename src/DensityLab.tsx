@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Compass, Sun, Moon, RefreshCw, AlertTriangle, Download } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -40,6 +40,7 @@ import {
 import PriceIcdChart from '@/src/components/density/PriceIcdChart';
 import Heatmap from '@/src/components/density/Heatmap';
 import EquityCurveChart from '@/src/components/density/EquityCurveChart';
+import RobustnessLab from '@/src/components/density/RobustnessLab';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -91,13 +92,14 @@ interface ApiResponse {
   missingStatic: string[];
 }
 
-type TabKey = 'grafico' | 'mapa' | 'ranking' | 'backtest';
+type TabKey = 'grafico' | 'mapa' | 'ranking' | 'backtest' | 'robustez';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'backtest', label: 'Backtesting Cuantitativo' },
   { key: 'grafico', label: 'Grafico Principal' },
   { key: 'mapa', label: 'Mapa de Rotacion' },
   { key: 'ranking', label: 'Ranking de Sectores' },
+  { key: 'robustez', label: 'Pruebas de Robustez' },
 ];
 
 function Slider({
@@ -322,7 +324,7 @@ export default function DensityLab() {
   // separadas que reinician en 1.0. Un tramo (segment) por ventana, con
   // color propio, para que se distingan Backtest/Validacion/Live sin
   // cortar el grafico en 3.
-  const combinedStrategySegments = useMemo(() => {
+  const { segments: combinedStrategySegments, realizedCurve: combinedRealizedCurve } = useMemo(() => {
     const segments: {
       key: WindowKey;
       label: string;
@@ -331,6 +333,12 @@ export default function DensityLab() {
       leadingFlat: boolean;
       trailingFlat: boolean;
     }[] = [];
+    // Curva "sombra" de solo cierres realizados -- salta directo de un
+    // trade cerrado al siguiente (sin marcar a mercado intra-tenencia),
+    // mismo criterio que la curva de equity ANTES del fix de marcado
+    // diario. Se muestra superpuesta para comparar cuanto ruido
+    // intra-posicion esconde mirar solo el P&L realizado.
+    const realizedCurve: EquityPoint[] = [];
     let carry = 1;
     for (const key of WINDOW_ORDER) {
       const w = WINDOWS[key];
@@ -339,7 +347,8 @@ export default function DensityLab() {
         const sliced = sliceWindow(rows, w.start, w.end);
         if (sliced.length > 0) win[t] = sliced;
       }
-      const curve = runStrategyCurve(win, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>);
+      const trades: Trade[] = [];
+      const curve = runStrategyCurve(win, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>, trades);
       if (curve.length === 0) continue;
       const base = curve[0].value;
       const points = curve.map((p) => ({ date: p.date, value: (p.value / base) * carry }));
@@ -363,10 +372,21 @@ export default function DensityLab() {
         points.push({ date: windowEnd, value: points[points.length - 1].value });
         trailingFlat = true;
       }
+
+      const sortedTrades = [...trades].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
+      if (sortedTrades.length > 0) {
+        if (realizedCurve.length === 0) realizedCurve.push({ date: sortedTrades[0].entryDate, value: carry });
+        let realizedEquity = carry;
+        for (const t of sortedTrades) {
+          realizedEquity *= t.exitPrice / t.entryPrice;
+          realizedCurve.push({ date: t.exitDate, value: realizedEquity });
+        }
+      }
+
       carry = points[points.length - 1].value;
       segments.push({ key, label: WINDOWS[key].label, color: WINDOW_COLORS[key], points, leadingFlat, trailingFlat });
     }
-    return segments;
+    return { segments, realizedCurve: realizedCurve.length >= 2 ? realizedCurve : [] };
   }, [sectorMetricsFull, strategyMethod, lookbackDays, holdDays, priceVolK, regimeMap]);
 
   // SPY buy&hold continuo 2018-presente (sin cortar por ventana) -- sirve
@@ -492,6 +512,15 @@ export default function DensityLab() {
       setExporting(false);
     }
   };
+
+  // Pestana Pruebas de Robustez: misma metodologia/parametros de la barra
+  // lateral, pero con lookback variable (para el walk-forward que lo
+  // optimiza en cada In-Sample). No afecta ningun calculo de arriba.
+  const runStrategyForRobustness = useCallback(
+    (win: Record<string, DensityRow[]>, lb: number, outTrades: Trade[]) =>
+      runStrategyCurve(win, strategyMethod, lb, holdDays, priceVolK, regimeMap as Map<string, MarketRegime>, outTrades),
+    [strategyMethod, holdDays, priceVolK, regimeMap]
+  );
 
   const selectedInfo = data?.staticInfos[selectedTicker];
   const selectedSeries = sectorMetricsWindow[selectedTicker] ?? [];
@@ -808,6 +837,16 @@ export default function DensityLab() {
                   </div>
                 )}
 
+                {activeTab === 'robustez' && (
+                  <RobustnessLab
+                    sectorMetricsFull={sectorMetricsFull}
+                    spyBars={data.priceBars[BENCHMARK] ?? []}
+                    runStrategy={runStrategyForRobustness}
+                    lookbackDays={lookbackDays}
+                    methodLabel={strategyMethodLabel()}
+                  />
+                )}
+
                 {activeTab === 'backtest' && (
                   <div className="space-y-8">
                     <div>
@@ -830,6 +869,7 @@ export default function DensityLab() {
                       <EquityCurveChart
                         segments={combinedStrategySegments}
                         benchmark={combinedBenchmarkCurve}
+                        shadowCurve={combinedRealizedCurve}
                         boundaries={WINDOW_BOUNDARIES}
                         selectedWindow={windowKey}
                         onSelectWindow={setWindowKey}
