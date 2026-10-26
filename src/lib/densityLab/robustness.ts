@@ -613,44 +613,35 @@ export interface SplitResult {
 }
 
 export interface DegradationVerdict {
-  /** 'real': el OOS falla Y empeora frente a su propio IS. 'none': no se cumplen ambas. 'na': IS sin ventaja o sin datos. */
+  /** 'real': Calmar OOS < 80% del Calmar IS. 'none': retiene >= 80%. 'na': IS sin ventaja, infinito o sin datos. */
   kind: 'real' | 'none' | 'na';
   /** Comentario legible: motivos de la degradacion, o por que no aplica. */
   comment: string;
 }
 
+/** Retencion minima de Calmar OOS/IS -- mismo umbral que la Robustez Calmar de la pestana principal (min/max >= 0.8). */
+export const CALMAR_RETENTION_MIN = 0.8;
+
 /**
- * Degradacion "real" del modelo = se cumplen DOS cosas a la vez en el OOS
- * (metricas netas de costos):
- *  A. Resultado malo: retorno neto <= 0, o por debajo de SPY en el mismo
- *     periodo.
- *  B. Peor que su propio IS: Sharpe OOS < 50% del IS, Calmar OOS < 50% del
- *     IS, o MaxDD OOS > 1.5x el del IS.
- * Solo A puede ser un mercado dificil que el IS tampoco habria superado;
- * solo B puede ser ruido de una ventana corta con resultado igual bueno.
- * Si el IS no tiene ventaja (Calmar neto <= 0) no hay nada que degradar.
+ * Degradacion por Calmar (neto de costos): hay degradacion real si el
+ * Calmar OOS retiene menos del 80% del Calmar IS. Calmar OOS null (sin
+ * drawdown y sin ganancia) cuenta como 0; infinito (gana sin drawdown) no
+ * degrada. Si el IS no tiene ventaja (Calmar <= 0) o es infinito, la
+ * razon no es comparable.
  */
 export function assessDegradation(is: PeriodResult, oos: PeriodResult): DegradationVerdict {
-  const i = is.net;
-  const o = oos.net;
-  if (!i || !o || !oos.spy) return { kind: 'na', comment: 'Sin datos suficientes' };
-  if (i.calmar === null || i.calmar <= 0) return { kind: 'na', comment: 'IS sin ventaja (Calmar <= 0): no hay que degradar' };
+  const cIs = is.net?.calmar;
+  if (!is.net || !oos.net) return { kind: 'na', comment: 'Sin datos suficientes' };
+  if (cIs === null || cIs === undefined || cIs <= 0) return { kind: 'na', comment: 'Calmar IS <= 0: sin ventaja que degradar' };
+  if (!Number.isFinite(cIs)) return { kind: 'na', comment: 'Calmar IS infinito (sin drawdown): no comparable' };
 
-  const outcome: string[] = [];
-  if (o.totalReturnPct <= 0) outcome.push(`OOS pierde ${o.totalReturnPct.toFixed(1)}%`);
-  else if (o.totalReturnPct < oos.spy.totalReturnPct)
-    outcome.push(`OOS ${o.totalReturnPct.toFixed(1)}% bajo SPY ${oos.spy.totalReturnPct.toFixed(1)}%`);
-
-  const vsIs: string[] = [];
-  if (i.sharpe !== null && i.sharpe > 0 && (o.sharpe === null || o.sharpe < 0.5 * i.sharpe))
-    vsIs.push(`Sharpe ${i.sharpe.toFixed(2)} -> ${o.sharpe === null ? '—' : o.sharpe.toFixed(2)}`);
-  if (Number.isFinite(i.calmar) && (o.calmar === null || o.calmar < 0.5 * i.calmar))
-    vsIs.push(`Calmar ${i.calmar.toFixed(2)} -> ${o.calmar === null ? '—' : o.calmar.toFixed(2)}`);
-  if (i.maxDrawdownPct > 0 && o.maxDrawdownPct > 1.5 * i.maxDrawdownPct)
-    vsIs.push(`MaxDD ${i.maxDrawdownPct.toFixed(1)}% -> ${o.maxDrawdownPct.toFixed(1)}%`);
-
-  if (outcome.length > 0 && vsIs.length > 0) return { kind: 'real', comment: `Degradacion real: ${[...outcome, ...vsIs].join(' · ')}` };
-  return { kind: 'none', comment: '' };
+  const cOos = oos.net.calmar ?? 0;
+  if (!Number.isFinite(cOos) || cOos / cIs >= CALMAR_RETENTION_MIN) return { kind: 'none', comment: '' };
+  const retention = cOos / cIs;
+  return {
+    kind: 'real',
+    comment: `Degradacion real: Calmar ${cIs.toFixed(2)} -> ${cOos.toFixed(2)} (retiene ${(retention * 100).toFixed(0)}%, minimo ${CALMAR_RETENTION_MIN * 100}%)`,
+  };
 }
 
 export const LOOKBACK_GRID = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];

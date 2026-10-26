@@ -502,9 +502,9 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
           </div>
           <p className="text-[9px] font-mono text-ink/40">
             Retornos = retorno total del periodo. Cada periodo se simula SOLO con sus propios datos (la estrategia arranca de cero al inicio,
-            igual que las ventanas originales). Diagnostico: se marca degradacion real solo si el OOS (neto) falla en resultado -- pierde o
-            queda bajo SPY -- Y ademas empeora frente a su propio IS: Sharpe o Calmar &lt; 50% del IS, o MaxDD &gt; 1.5x el del IS. Una sola de
-            las dos puede ser un mercado dificil o ruido de ventana corta; vacio = sin degradacion real.
+            igual que las ventanas originales). Diagnostico: degradacion real si el Calmar neto OOS retiene menos del 80% del Calmar neto IS
+            (mismo umbral que la Robustez Calmar de la pestana principal); vacio = sin degradacion. No aplica si el Calmar IS es &lt;= 0 o
+            infinito.
           </p>
         </div>
       )}
