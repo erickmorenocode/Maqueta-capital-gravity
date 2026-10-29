@@ -1,7 +1,7 @@
 'use client';
 
 import * as d3 from 'd3';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -222,6 +222,7 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
   // Split con el grafico abierto: undefined = sin tocar (se abre el primero), null = todos cerrados.
   const [openSplit, setOpenSplit] = useState<string | null | undefined>(undefined);
   const openSplitLabel = openSplit === undefined ? splitResults[0]?.split.label ?? null : openSplit;
+  const openSplitResult = splitResults.find((r) => r.split.label === openSplitLabel) ?? null;
   const [chartScenario, setChartScenario] = useState<YearScenario['key']>('all');
 
   const nonCausalCount = splitResults.filter((r) => r.degradation.kind === 'noncausal').length;
@@ -515,62 +516,63 @@ export default function RobustnessLab({ rollingWindow, freeFloatRatio, runStrate
                 {splitResults.map((r) => {
                   const isOpen = r.split.label === openSplitLabel;
                   return (
-                    <Fragment key={r.split.label}>
-                      <tr
-                        onClick={() => setOpenSplit(isOpen ? null : r.split.label)}
-                        className={cn('border-b border-border/40 cursor-pointer hover:bg-accent/5', isOpen && 'bg-accent/5')}
-                        title="Ver grafico IS / OOS vs SPY"
+                    <tr
+                      key={r.split.label}
+                      onClick={() => setOpenSplit(isOpen ? null : r.split.label)}
+                      className={cn('border-b border-border/40 cursor-pointer hover:bg-accent/5', isOpen && 'bg-accent/5')}
+                      title="Ver grafico IS / OOS vs SPY"
+                    >
+                      <td className="py-2 px-2 whitespace-nowrap">
+                        <span className="text-accent mr-1.5">{isOpen ? '▾' : '▸'}</span>
+                        {r.split.label}
+                      </td>
+                      <td className="text-right py-2 px-2">{r.lookbackUsed}d</td>
+                      <td className="text-right py-2 px-2 text-ink/50">{fmtPct(r.is.gross?.totalReturnPct)}</td>
+                      <td className={cn('text-right py-2 px-2', tone(r.is.net?.totalReturnPct))}>{fmtPct(r.is.net?.totalReturnPct)}</td>
+                      <td className="text-right py-2 px-2">{fmtNum(r.is.net?.calmar)}</td>
+                      <td className="text-right py-2 px-2 text-ink/50">{fmtPct(r.oos.gross?.totalReturnPct)}</td>
+                      <td className={cn('text-right py-2 px-2 font-bold', tone(r.oos.net?.totalReturnPct))}>{fmtPct(r.oos.net?.totalReturnPct)}</td>
+                      <td className="text-right py-2 px-2 text-ink/60">{fmtPct(r.oos.spy?.totalReturnPct)}</td>
+                      <td className="text-right py-2 px-2">{fmtNum(r.oos.net?.sharpe)}</td>
+                      <td className="text-right py-2 px-2">{r.oos.net ? `-${r.oos.net.maxDrawdownPct.toFixed(1)}%` : '—'}</td>
+                      <td className="text-right py-2 px-2">{fmtNum(r.oos.net?.calmar)}</td>
+                      <td className="text-right py-2 px-2">{r.oos.net?.trades ?? '—'}</td>
+                      <td className="text-right py-2 px-2 text-ink/60">{r.oos.net ? fmtUsd(r.oos.net.totalCostUsd) : '—'}</td>
+                      <td
+                        className={cn(
+                          'py-2 px-2 min-w-[220px]',
+                          r.degradation.kind === 'real' ? 'text-red-500' : r.degradation.kind === 'noncausal' ? 'text-amber-500' : 'text-ink/40'
+                        )}
                       >
-                        <td className="py-2 px-2 whitespace-nowrap">
-                          <span className="text-accent mr-1.5">{isOpen ? '▾' : '▸'}</span>
-                          {r.split.label}
-                        </td>
-                        <td className="text-right py-2 px-2">{r.lookbackUsed}d</td>
-                        <td className="text-right py-2 px-2 text-ink/50">{fmtPct(r.is.gross?.totalReturnPct)}</td>
-                        <td className={cn('text-right py-2 px-2', tone(r.is.net?.totalReturnPct))}>{fmtPct(r.is.net?.totalReturnPct)}</td>
-                        <td className="text-right py-2 px-2">{fmtNum(r.is.net?.calmar)}</td>
-                        <td className="text-right py-2 px-2 text-ink/50">{fmtPct(r.oos.gross?.totalReturnPct)}</td>
-                        <td className={cn('text-right py-2 px-2 font-bold', tone(r.oos.net?.totalReturnPct))}>{fmtPct(r.oos.net?.totalReturnPct)}</td>
-                        <td className="text-right py-2 px-2 text-ink/60">{fmtPct(r.oos.spy?.totalReturnPct)}</td>
-                        <td className="text-right py-2 px-2">{fmtNum(r.oos.net?.sharpe)}</td>
-                        <td className="text-right py-2 px-2">{r.oos.net ? `-${r.oos.net.maxDrawdownPct.toFixed(1)}%` : '—'}</td>
-                        <td className="text-right py-2 px-2">{fmtNum(r.oos.net?.calmar)}</td>
-                        <td className="text-right py-2 px-2">{r.oos.net?.trades ?? '—'}</td>
-                        <td className="text-right py-2 px-2 text-ink/60">{r.oos.net ? fmtUsd(r.oos.net.totalCostUsd) : '—'}</td>
-                        <td
-                          className={cn(
-                            'py-2 px-2 min-w-[220px]',
-                            r.degradation.kind === 'real' ? 'text-red-500' : r.degradation.kind === 'noncausal' ? 'text-amber-500' : 'text-ink/40'
-                          )}
-                        >
-                          {r.degradation.comment}
-                        </td>
-                      </tr>
-                      {isOpen && (
-                        <tr className="border-b border-border/40">
-                          <td colSpan={14} className="px-2 py-3">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <RobustnessChart
-                                compact
-                                title={`IS ${r.split.isStart} a ${r.split.isEnd} · neto ${fmtPct(r.is.net?.totalReturnPct)} vs SPY ${fmtPct(r.is.spy?.totalReturnPct)}`}
-                                series={vsSpySeries(r.is.grossCurve, r.is.netCurve, r.is.spyCurve)}
-                              />
-                              <RobustnessChart
-                                compact
-                                title={`OOS ${r.split.oosStart} a ${r.split.oosEnd} · neto ${fmtPct(r.oos.net?.totalReturnPct)} vs SPY ${fmtPct(r.oos.spy?.totalReturnPct)}`}
-                                series={vsSpySeries(r.oos.grossCurve, r.oos.netCurve, r.oos.spyCurve)}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                        {r.degradation.comment}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
             </table>
             {splitResults.length === 0 && <p className="text-[11px] font-mono text-ink/40 py-8 text-center">Sin splits validos.</p>}
           </div>
+          {openSplitResult && (
+            <div className="border border-border rounded-lg p-3 space-y-2">
+              <div className="text-[10px] font-mono text-ink/70">
+                Grafico vs SPY: <span className="text-accent">{openSplitResult.split.label}</span>
+                <span className="text-ink/40"> (clic en otra fila de la tabla para cambiar de split)</span>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <RobustnessChart
+                  compact
+                  title={`IS ${openSplitResult.split.isStart} a ${openSplitResult.split.isEnd} · neto ${fmtPct(openSplitResult.is.net?.totalReturnPct)} vs SPY ${fmtPct(openSplitResult.is.spy?.totalReturnPct)}`}
+                  series={vsSpySeries(openSplitResult.is.grossCurve, openSplitResult.is.netCurve, openSplitResult.is.spyCurve)}
+                />
+                <RobustnessChart
+                  compact
+                  title={`OOS ${openSplitResult.split.oosStart} a ${openSplitResult.split.oosEnd} · neto ${fmtPct(openSplitResult.oos.net?.totalReturnPct)} vs SPY ${fmtPct(openSplitResult.oos.spy?.totalReturnPct)}`}
+                  series={vsSpySeries(openSplitResult.oos.grossCurve, openSplitResult.oos.netCurve, openSplitResult.oos.spyCurve)}
+                />
+              </div>
+            </div>
+          )}
           <p className="text-[9px] font-mono text-ink/40">
             Retornos = retorno total del periodo. Cada periodo se simula SOLO con sus propios datos (la estrategia arranca de cero al inicio,
             igual que las ventanas originales). Diagnostico: degradacion real si el Calmar neto OOS retiene menos del 80% del Calmar neto IS
@@ -889,6 +891,8 @@ function Card({ label, value, toneValue }: { label: string; value: string; toneV
 
 const CW = 1000;
 const CH = 300;
+const CW_COMPACT = 560;
+const CH_COMPACT = 260;
 const CM = { top: 14, right: 20, bottom: 26, left: 50 };
 
 interface ChartSeries {
@@ -903,7 +907,7 @@ interface ChartSeries {
 const vsSpySeries = (gross: EquityPoint[], net: EquityPoint[], spy: EquityPoint[], netLabel = 'Estrategia neto'): ChartSeries[] => [
   { label: 'Estrategia bruto (sin costos)', color: '#94a3b8', points: gross, dashed: true },
   { label: netLabel, color: '#10b981', points: net },
-  { label: 'Buy & Hold SPY', color: '#64748b', points: spy, dashed: true, thin: true },
+  { label: 'Buy & Hold SPY', color: '#f59e0b', points: spy, thin: true },
 ];
 
 /**
@@ -922,11 +926,15 @@ function RobustnessChart({
   stitched?: boolean;
   compact?: boolean;
 }) {
+  // El compacto va a media pantalla: lienzo mas chico para que el texto
+  // de los ejes no quede diminuto al escalar el SVG.
+  const W = compact ? CW_COMPACT : CW;
+  const H = compact ? CH_COMPACT : CH;
   const chart = useMemo(() => {
     const all = series.flatMap((s) => s.points);
     if (all.length < 2) return null;
-    const innerW = CW - CM.left - CM.right;
-    const innerH = CH - CM.top - CM.bottom;
+    const innerW = W - CM.left - CM.right;
+    const innerH = H - CM.top - CM.bottom;
     const ref = series.reduce((a, s) => (s.points.length > a.length ? s.points : a), [] as EquityPoint[]);
     const xIdx = d3.scaleLinear().domain([0, Math.max(1, ref.length - 1)]).range([0, innerW]);
     const xTime = d3.scaleTime().domain(d3.extent(all, (p) => new Date(p.date)) as [Date, Date]).range([0, innerW]);
@@ -942,9 +950,9 @@ function RobustnessChart({
           .map((p, i) => ({ i, year: p.date.slice(0, 4) }))
           .filter((t, k, arr) => k === 0 || t.year !== arr[k - 1].year)
           .map((t) => ({ x: xIdx(t.i), label: t.year }))
-      : xTime.ticks(compact ? 4 : 6).map((t) => ({ x: xTime(t), label: d3.timeFormat('%b %y')(t) }));
+      : xTime.ticks(6).map((t) => ({ x: xTime(t), label: d3.timeFormat('%b %y')(t) }));
     return { innerW, innerH, y, xTicks, paths: series.map((s) => (s.points.length >= 2 ? line(s.points) ?? '' : '')) };
-  }, [series, stitched, compact]);
+  }, [series, stitched, W, H]);
 
   if (!chart) return <div className="text-[11px] font-mono text-ink/40 py-12 text-center">Sin datos suficientes para graficar.</div>;
   const { innerW, innerH, y, xTicks, paths } = chart;
@@ -953,8 +961,8 @@ function RobustnessChart({
     <div>
       {title && <div className="text-[9px] font-mono uppercase tracking-widest text-ink/50 mb-1">{title}</div>}
       <svg
-        viewBox={`0 0 ${CW} ${CH}`}
-        className={cn('w-full', compact ? 'h-[200px]' : 'h-[300px]')}
+        viewBox={`0 0 ${W} ${H}`}
+        className={cn('w-full', compact ? 'h-auto' : 'h-[300px]')}
         role="img"
         aria-label={title ? `${title}: estrategia vs SPY` : 'Curva de equity de la estrategia vs SPY'}
       >
