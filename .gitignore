@@ -10,3 +10,4 @@ coverage/
 .code-review-graph/
 .next/
 .gstack/
+tsconfig.tsbuildinfo
